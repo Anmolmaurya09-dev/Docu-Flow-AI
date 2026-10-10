@@ -53,19 +53,19 @@ function Home() {
   const shown = useMemo(() => toolItems.filter((item) => `${item.title} ${item.desc}`.toLowerCase().includes(search.toLowerCase())), [search]);
   return (
     <Layout><section className="page-heading" style={{ paddingTop: 68 }}>
-      <h1
-        data-testid="text-home-headline"
-        style={{ fontSize:'clamp(44px,7vw,74px)',maxWidth:800,marginTop:18 }}
-        className="text-[65px] font-normal">Everything your project needs.</h1>
-      <p style={{ fontSize:16,maxWidth:610 }}>Useful project docs and small developer tools, without accounts, setup, or uploads. Your work stays right here in your browser.</p>
-      <div className="search-wrap"><Search size={18} /><input className="field" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search developer tools..." aria-label="Search developer tools..." data-testid="input-tool-search" /></div>
-    </section>
-    <section aria-label="Documentation tools" style={{ marginTop:6 }}><h2 style={{ fontSize:19,letterSpacing:'-.03em',margin:'0 0 15px' }}>Documentation</h2></section>
-    <section aria-label="Developer tools" className="tool-grid" data-testid="grid-tools">{shown.map(({ title, desc, href, icon: Icon, tag }) => <Link key={href} href={href} className="panel tool-card" data-testid={`card-tool-${href.slice(1)}`}>
-      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}><span className="icon-tile"><Icon size={20} /></span><span className="eyebrow" style={{ fontSize:9,color:'#91a2b2' }}>{tag}</span></div><h2>{title}</h2><p>{desc}</p><ArrowRight className="tool-arrow" size={17} />
-    </Link>)}</section>
-    {shown.length === 0 && <div className="panel" style={{ marginTop:16,padding:24 }} data-testid="empty-search"><strong>No matching tools.</strong><p style={{ color:'#9dacbb',fontSize:13 }}>Try “docs”, “JSON”, or “project”.</p></div>}
-    <section className="panel" style={{ padding:'22px 24px',margin:'24px 0 44px',display:'flex',gap:16,alignItems:'flex-start' }}><span className="icon-tile" style={{ flexShrink:0 }}><LockKeyhole size={18}/></span><div><strong style={{ fontSize:13 }}>Private by design.</strong><p style={{ color:'#9dacbb',fontSize:12,lineHeight:1.7,margin:'5px 0 0' }}>Files are read locally for the task you choose. Nothing is sent to a server, and uploaded source is never executed.</p></div></section>
+        <h1
+          data-testid="text-home-headline"
+          style={{ fontSize:'clamp(44px,7vw,74px)',maxWidth:800,marginTop:18 }}
+          className="font-normal text-[65px]">Everything your project needs.</h1>
+        <p style={{ fontSize:16,maxWidth:610 }}>Useful project docs and small developer tools, without accounts, setup, or uploads. Your work stays right here in your browser.</p>
+        <div className="search-wrap"><Search size={18} /><input className="field" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search developer tools..." aria-label="Search developer tools..." data-testid="input-tool-search" /></div>
+      </section>
+      <section aria-label="Documentation tools" style={{ marginTop:6 }}><h2 style={{ fontSize:19,letterSpacing:'-.03em',margin:'0 0 15px' }}>Documentation</h2></section>
+      <section aria-label="Developer tools" className="tool-grid" data-testid="grid-tools">{shown.map(({ title, desc, href, icon: Icon, tag }) => <Link key={href} href={href} className="panel tool-card" data-testid={`card-tool-${href.slice(1)}`}>
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}><span className="icon-tile"><Icon size={20} /></span><span className="eyebrow" style={{ fontSize:9,color:'#91a2b2' }}>{tag}</span></div><h2>{title}</h2><p>{desc}</p><ArrowRight className="tool-arrow" size={17} />
+      </Link>)}</section>
+      {shown.length === 0 && <div className="panel" style={{ marginTop:16,padding:24 }} data-testid="empty-search"><strong>No matching tools.</strong><p style={{ color:'#9dacbb',fontSize:13 }}>Try “docs”, “JSON”, or “project”.</p></div>}
+      <section className="panel" style={{ padding:'22px 24px',margin:'24px 0 44px',display:'flex',gap:16,alignItems:'flex-start' }}><span className="icon-tile" style={{ flexShrink:0 }}><LockKeyhole size={18}/></span><div><strong style={{ fontSize:13 }}>Private by design.</strong><p style={{ color:'#9dacbb',fontSize:12,lineHeight:1.7,margin:'5px 0 0' }}>Files are read locally for the task you choose. Nothing is sent to a server, and uploaded source is never executed.</p></div></section>
     </Layout>
   );
 }
