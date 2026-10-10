@@ -51,18 +51,23 @@ const toolItems = [
 function Home() {
   const [search, setSearch] = useState('');
   const shown = useMemo(() => toolItems.filter((item) => `${item.title} ${item.desc}`.toLowerCase().includes(search.toLowerCase())), [search]);
-  return <Layout><section className="page-heading" style={{ paddingTop: 68 }}>
-    <h1 data-testid="text-home-headline" style={{ fontSize:'clamp(44px,7vw,74px)',maxWidth:800,marginTop:18 }}>Everything your project needs.</h1>
-    <p style={{ fontSize:16,maxWidth:610 }}>Useful project docs and small developer tools, without accounts, setup, or uploads. Your work stays right here in your browser.</p>
-    <div className="search-wrap"><Search size={18} /><input className="field" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search developer tools..." aria-label="Search developer tools..." data-testid="input-tool-search" /></div>
-  </section>
-  <section aria-label="Documentation tools" style={{ marginTop:6 }}><h2 style={{ fontSize:19,letterSpacing:'-.03em',margin:'0 0 15px' }}>Documentation</h2></section>
-  <section aria-label="Developer tools" className="tool-grid" data-testid="grid-tools">{shown.map(({ title, desc, href, icon: Icon, tag }) => <Link key={href} href={href} className="panel tool-card" data-testid={`card-tool-${href.slice(1)}`}>
-    <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}><span className="icon-tile"><Icon size={20} /></span><span className="eyebrow" style={{ fontSize:9,color:'#91a2b2' }}>{tag}</span></div><h2>{title}</h2><p>{desc}</p><ArrowRight className="tool-arrow" size={17} />
-  </Link>)}</section>
-  {shown.length === 0 && <div className="panel" style={{ marginTop:16,padding:24 }} data-testid="empty-search"><strong>No matching tools.</strong><p style={{ color:'#9dacbb',fontSize:13 }}>Try “docs”, “JSON”, or “project”.</p></div>}
-  <section className="panel" style={{ padding:'22px 24px',margin:'24px 0 44px',display:'flex',gap:16,alignItems:'flex-start' }}><span className="icon-tile" style={{ flexShrink:0 }}><LockKeyhole size={18}/></span><div><strong style={{ fontSize:13 }}>Private by design.</strong><p style={{ color:'#9dacbb',fontSize:12,lineHeight:1.7,margin:'5px 0 0' }}>Files are read locally for the task you choose. Nothing is sent to a server, and uploaded source is never executed.</p></div></section>
-  </Layout>;
+  return (
+    <Layout><section className="page-heading" style={{ paddingTop: 68 }}>
+      <h1
+        data-testid="text-home-headline"
+        style={{ fontSize:'clamp(44px,7vw,74px)',maxWidth:800,marginTop:18 }}
+        className="text-[65px] font-normal">Everything your project needs.</h1>
+      <p style={{ fontSize:16,maxWidth:610 }}>Useful project docs and small developer tools, without accounts, setup, or uploads. Your work stays right here in your browser.</p>
+      <div className="search-wrap"><Search size={18} /><input className="field" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search developer tools..." aria-label="Search developer tools..." data-testid="input-tool-search" /></div>
+    </section>
+    <section aria-label="Documentation tools" style={{ marginTop:6 }}><h2 style={{ fontSize:19,letterSpacing:'-.03em',margin:'0 0 15px' }}>Documentation</h2></section>
+    <section aria-label="Developer tools" className="tool-grid" data-testid="grid-tools">{shown.map(({ title, desc, href, icon: Icon, tag }) => <Link key={href} href={href} className="panel tool-card" data-testid={`card-tool-${href.slice(1)}`}>
+      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}><span className="icon-tile"><Icon size={20} /></span><span className="eyebrow" style={{ fontSize:9,color:'#91a2b2' }}>{tag}</span></div><h2>{title}</h2><p>{desc}</p><ArrowRight className="tool-arrow" size={17} />
+    </Link>)}</section>
+    {shown.length === 0 && <div className="panel" style={{ marginTop:16,padding:24 }} data-testid="empty-search"><strong>No matching tools.</strong><p style={{ color:'#9dacbb',fontSize:13 }}>Try “docs”, “JSON”, or “project”.</p></div>}
+    <section className="panel" style={{ padding:'22px 24px',margin:'24px 0 44px',display:'flex',gap:16,alignItems:'flex-start' }}><span className="icon-tile" style={{ flexShrink:0 }}><LockKeyhole size={18}/></span><div><strong style={{ fontSize:13 }}>Private by design.</strong><p style={{ color:'#9dacbb',fontSize:12,lineHeight:1.7,margin:'5px 0 0' }}>Files are read locally for the task you choose. Nothing is sent to a server, and uploaded source is never executed.</p></div></section>
+    </Layout>
+  );
 }
 
 function ReadmeStudio() {
@@ -86,29 +91,31 @@ function ReadmeStudio() {
     return `# ${project}\n\n${description.trim() ? `> ${description.trim()}\n\n` : '> [Add a short, verified project description.]\n\n'}## Problem\n\n${problem.trim() || '[Describe the problem this project solves.]'}\n\n## Features\n\n${featureLines}\n\n## Technologies\n\n${techLines}\n\n## Installation\n\n${installation.trim() || '[Add tested installation instructions. No commands are inferred.]'}\n\n## Usage\n\n${usage.trim() || '[Add a usage example that matches the actual implementation.]'}\n\n## Project status\n\n${projectStatus.trim() || '[Add the current project status.]'}\n\n## License\n\n${license.trim() || '[Add the license used by this project.]'}\n\n## Author and links\n\n${authorLinks.trim() || '[Add an author name or project links (optional).]'}\n`;
   }, [name, description, problem, features, technologies, installation, usage, projectStatus, license, authorLinks]);
   const act = async (fn: () => Promise<void>, success: string) => { try { await fn(); setMessage(success); } catch { setMessage('Clipboard access is unavailable. You can still select and copy the Markdown.'); } };
-  return <Layout><PageTitle kicker="DOCUMENTATION / 01" title="README Studio" description="Shape the first page of your project docs. Edit Markdown directly or start with a structured draft." />
-    <div style={{ display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16 }}><BackHome/><button className="btn btn-quiet" onClick={() => { setName('');setDescription('');setProblem('');setFeatures('');setTechnologies('');setInstallation('');setUsage('');setProjectStatus('');setLicense('');setAuthorLinks('');setMarkdown(starterReadme);setMessage('Starter template loaded.'); }} data-testid="button-readme-sample"><Sparkles size={15}/> Load template</button><button className="btn btn-quiet" onClick={() => { setMarkdown(generated);setTab('edit');setMessage('Draft generated from your details.'); }} data-testid="button-readme-generate"><FileText size={15}/> Generate draft</button><button className="btn btn-quiet" onClick={() => void act(() => copyText(markdown), 'Markdown copied.')} data-testid="button-readme-copy"><Clipboard size={15}/> Copy</button><button className="btn btn-primary" onClick={() => downloadText(`${(name.trim() || 'README').replace(/[^\w-]+/g,'-')}.md`,markdown)} data-testid="button-readme-download"><ArrowDownToLine size={15}/> Download .md</button><ToastLine message={message}/></div>
-    <div className="split">
-      <section className="panel" style={{ padding:20 }}>
-        <div className="eyebrow" style={{ marginBottom:15 }}>QUICK DETAILS</div>
-        <label className="field-label" htmlFor="readme-name">Project name</label><input id="readme-name" className="field" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. orbit-notes" data-testid="input-readme-name"/>
-        <label className="field-label" htmlFor="readme-desc" style={{ marginTop:16 }}>Short description</label><textarea id="readme-desc" className="field" rows={3} value={description} onChange={e=>setDescription(e.target.value)} placeholder="One sentence about what it does" data-testid="input-readme-description"/>
-        <label className="field-label" htmlFor="readme-problem" style={{ marginTop:16 }}>Problem it solves</label><textarea id="readme-problem" className="field" rows={3} value={problem} onChange={e=>setProblem(e.target.value)} placeholder="What problem does this project address?" data-testid="input-readme-problem"/>
-        <label className="field-label" htmlFor="readme-features" style={{ marginTop:16 }}>Features, one per line</label><textarea id="readme-features" className="field" rows={4} value={features} onChange={e=>setFeatures(e.target.value)} placeholder="A capability you have verified" data-testid="input-readme-features"/>
-        <label className="field-label" htmlFor="readme-technologies" style={{ marginTop:16 }}>Technologies used</label><input id="readme-technologies" className="field" value={technologies} onChange={e=>setTechnologies(e.target.value)} placeholder="React, TypeScript, ... (comma-separated)" data-testid="input-readme-technologies"/>
-        <label className="field-label" htmlFor="readme-installation" style={{ marginTop:16 }}>Installation instructions</label><textarea id="readme-installation" className="field code" rows={3} value={installation} onChange={e=>setInstallation(e.target.value)} placeholder="Add steps you have tested" data-testid="input-readme-installation"/>
-        <label className="field-label" htmlFor="readme-usage" style={{ marginTop:16 }}>Usage instructions</label><textarea id="readme-usage" className="field" rows={3} value={usage} onChange={e=>setUsage(e.target.value)} placeholder="Describe actual project usage" data-testid="input-readme-usage"/>
-        <label className="field-label" htmlFor="readme-status" style={{ marginTop:16 }}>Project status</label><input id="readme-status" className="field" value={projectStatus} onChange={e=>setProjectStatus(e.target.value)} placeholder="e.g. In development" data-testid="input-readme-status"/>
-        <label className="field-label" htmlFor="readme-license" style={{ marginTop:16 }}>License</label><input id="readme-license" className="field" value={license} onChange={e=>setLicense(e.target.value)} placeholder="e.g. MIT (if applicable)" data-testid="input-readme-license"/>
-        <label className="field-label" htmlFor="readme-author" style={{ marginTop:16 }}>Author or project links (optional)</label><input id="readme-author" className="field" value={authorLinks} onChange={e=>setAuthorLinks(e.target.value)} placeholder="Name, repository, or website" data-testid="input-readme-author"/>
-        <div className="notice" style={{ marginTop:16 }}>Drafts use prompts rather than invented commands or capabilities. Review every section against your project.</div>
-      </section>
-      <section className="panel" style={{ padding:20 }}>
-        <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:14 }}><div className="eyebrow">README.MD</div><div className="tab-row"><button className="tab" aria-selected={tab==='edit'} onClick={()=>setTab('edit')} data-testid="tab-readme-edit">Edit</button><button className="tab" aria-selected={tab==='preview'} onClick={()=>setTab('preview')} data-testid="tab-readme-preview">Preview</button></div></div>
-        {tab==='edit' ? <textarea className="field code" style={{ minHeight:500,resize:'vertical' }} aria-label="Edit README Markdown" value={markdown} onChange={e=>setMarkdown(e.target.value)} data-testid="textarea-readme-markdown"/> : <div className="prose-preview" style={{ minHeight:500 }} dangerouslySetInnerHTML={{ __html:markdownToSafeHtml(markdown) }} data-testid="preview-readme-markdown"/>}
-      </section>
-    </div>
-  </Layout>;
+  return (
+    <Layout><PageTitle kicker="DOCUMENTATION / 01" title="README Studio" description="Shape the first page of your project docs. Edit Markdown directly or start with a structured draft." />
+      <div style={{ display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16 }}><BackHome/><button className="btn btn-quiet" onClick={() => { setName('');setDescription('');setProblem('');setFeatures('');setTechnologies('');setInstallation('');setUsage('');setProjectStatus('');setLicense('');setAuthorLinks('');setMarkdown(starterReadme);setMessage('Starter template loaded.'); }} data-testid="button-readme-sample"><Sparkles size={15}/> Load template</button><button className="btn btn-quiet" onClick={() => { setMarkdown(generated);setTab('edit');setMessage('Draft generated from your details.'); }} data-testid="button-readme-generate"><FileText size={15}/> Generate draft</button><button className="btn btn-quiet" onClick={() => void act(() => copyText(markdown), 'Markdown copied.')} data-testid="button-readme-copy"><Clipboard size={15}/> Copy</button><button className="btn btn-primary" onClick={() => downloadText(`${(name.trim() || 'README').replace(/[^\w-]+/g,'-')}.md`,markdown)} data-testid="button-readme-download"><ArrowDownToLine size={15}/> Download .md</button><ToastLine message={message}/></div>
+      <div className="split">
+        <section className="panel" style={{ padding:20 }}>
+          <div className="eyebrow" style={{ marginBottom:15 }}>QUICK DETAILS</div>
+          <label className="field-label" htmlFor="readme-name">Project name</label><input id="readme-name" className="field" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. orbit-notes" data-testid="input-readme-name"/>
+          <label className="field-label" htmlFor="readme-desc" style={{ marginTop:16 }}>Short description</label><textarea id="readme-desc" className="field" rows={3} value={description} onChange={e=>setDescription(e.target.value)} placeholder="One sentence about what it does" data-testid="input-readme-description"/>
+          <label className="field-label" htmlFor="readme-problem" style={{ marginTop:16 }}>Problem it solves</label><textarea id="readme-problem" className="field" rows={3} value={problem} onChange={e=>setProblem(e.target.value)} placeholder="What problem does this project address?" data-testid="input-readme-problem"/>
+          <label className="field-label" htmlFor="readme-features" style={{ marginTop:16 }}>Features, one per line</label><textarea id="readme-features" className="field" rows={4} value={features} onChange={e=>setFeatures(e.target.value)} placeholder="A capability you have verified" data-testid="input-readme-features"/>
+          <label className="field-label" htmlFor="readme-technologies" style={{ marginTop:16 }}>Technologies used</label><input id="readme-technologies" className="field" value={technologies} onChange={e=>setTechnologies(e.target.value)} placeholder="React, TypeScript, ... (comma-separated)" data-testid="input-readme-technologies"/>
+          <label className="field-label" htmlFor="readme-installation" style={{ marginTop:16 }}>Installation instructions</label><textarea id="readme-installation" className="field code" rows={3} value={installation} onChange={e=>setInstallation(e.target.value)} placeholder="Add steps you have tested" data-testid="input-readme-installation"/>
+          <label className="field-label" htmlFor="readme-usage" style={{ marginTop:16 }}>Usage instructions</label><textarea id="readme-usage" className="field" rows={3} value={usage} onChange={e=>setUsage(e.target.value)} placeholder="Describe actual project usage" data-testid="input-readme-usage"/>
+          <label className="field-label" htmlFor="readme-status" style={{ marginTop:16 }}>Project status</label><input id="readme-status" className="field" value={projectStatus} onChange={e=>setProjectStatus(e.target.value)} placeholder="e.g. In development" data-testid="input-readme-status"/>
+          <label className="field-label" htmlFor="readme-license" style={{ marginTop:16 }}>License</label><input id="readme-license" className="field" value={license} onChange={e=>setLicense(e.target.value)} placeholder="e.g. MIT (if applicable)" data-testid="input-readme-license"/>
+          <label className="field-label" htmlFor="readme-author" style={{ marginTop:16 }}>Author or project links (optional)</label><input id="readme-author" className="field" value={authorLinks} onChange={e=>setAuthorLinks(e.target.value)} placeholder="Name, repository, or website" data-testid="input-readme-author"/>
+          <div className="notice" style={{ marginTop:16 }}>Drafts use prompts rather than invented commands or capabilities. Review every section against your project.</div>
+        </section>
+        <section className="panel" style={{ padding:20 }}>
+          <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:14 }}><div className="eyebrow">README.MD</div><div className="tab-row"><button className="tab" aria-selected={tab==='edit'} onClick={()=>setTab('edit')} data-testid="tab-readme-edit">Edit</button><button className="tab" aria-selected={tab==='preview'} onClick={()=>setTab('preview')} data-testid="tab-readme-preview">Preview</button></div></div>
+          {tab==='edit' ? <textarea className="field code" style={{ minHeight:500,resize:'vertical' }} aria-label="Edit README Markdown" value={markdown} onChange={e=>setMarkdown(e.target.value)} data-testid="textarea-readme-markdown"/> : <div className="prose-preview" style={{ minHeight:500 }} dangerouslySetInnerHTML={{ __html:markdownToSafeHtml(markdown) }} data-testid="preview-readme-markdown"/>}
+        </section>
+      </div>
+    </Layout>
+  );
 }
 
 function ProjectAnalyzer({ onAnalyzed }: { onAnalyzed: (meta: ProjectMeta) => void }) {
