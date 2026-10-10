@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Docu-Flow AI"
+description = "A free, local-first developer tools app for generating project documentation, analyzing ZIP files in the browser, and using practical text utilities."
+version = "1.0.0"
+id = "artifacts/docu-flow"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21556
+
+[services.development]
+run = "pnpm --filter @workspace/docu-flow run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/docu-flow", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/docu-flow/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21556"
+BASE_PATH = "/"
