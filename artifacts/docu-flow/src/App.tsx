@@ -52,7 +52,6 @@ function Home() {
   const [search, setSearch] = useState('');
   const shown = useMemo(() => toolItems.filter((item) => `${item.title} ${item.desc}`.toLowerCase().includes(search.toLowerCase())), [search]);
   return <Layout><section className="page-heading" style={{ paddingTop: 68 }}>
-    <div className="eyebrow" style={{ display:'flex',alignItems:'center',gap:8 }}><span style={{ width:24,height:1,background:'#64dbea' }} /> LOCAL-FIRST DEVELOPER TOOLS</div>
     <h1 data-testid="text-home-headline" style={{ fontSize:'clamp(44px,7vw,74px)',maxWidth:800,marginTop:18 }}>Everything your project needs.</h1>
     <p style={{ fontSize:16,maxWidth:610 }}>Useful project docs and small developer tools, without accounts, setup, or uploads. Your work stays right here in your browser.</p>
     <div className="search-wrap"><Search size={18} /><input className="field" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search developer tools..." aria-label="Search developer tools..." data-testid="input-tool-search" /></div>
