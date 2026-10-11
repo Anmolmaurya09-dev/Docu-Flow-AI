@@ -1,0 +1,104 @@
+# Docu-Flow AI — Focused Bug Fixes and Regression Testing
+
+Act as a careful senior developer working on my EXISTING Docu-Flow AI application.
+
+IMPORTANT: My app already exists, its interface is good, and most of its features have been tested. Do not rebuild it from scratch.
+
+## Strict rules
+
+1. Preserve the current UI, colors, typography, layout, logo, tool cards, navigation, and responsive design.
+2. Do not remove or redesign existing features.
+3. Do not add authentication, login, sign-up, a database, payment processing, subscriptions, advertising, or AI API integrations.
+4. Do not introduce paid services or dependencies.
+5. Inspect the current code before editing.
+6. Make the smallest necessary changes.
+7. Back up the affected files or use the available version-control checkpoint before editing.
+8. Do not replace working functionality with mock implementations.
+9. If the reported issue is already fixed, verify it rather than making unnecessary changes.
+
+## FIX 1 — Markdown Tidy spacing
+
+Google's review identified a formatting bug in the Markdown Tidy/text-formatting utility.
+
+The reported problems are:
+
+* Excessive blank spaces inside paragraphs.
+* Missing spaces after Markdown heading markers, such as `##Features` instead of `## Features`.
+
+Inspect the existing formatting function and its tests before changing it.
+
+Requirements:
+
+* Normalize Markdown headings to the correct format.
+* Remove unintended repeated spaces within ordinary prose.
+* Normalize excessive blank lines without damaging document structure.
+* Preserve intentional indentation in code blocks.
+* Preserve fenced code blocks and their contents.
+* Avoid damaging Markdown lists, blockquotes, links, tables, inline code, and other valid Markdown syntax.
+* Do not blindly apply a global whitespace replacement that corrupts code or formatting.
+* Add or update tests for headings, paragraphs, lists, blank lines, and fenced code blocks.
+
+Example:
+
+Input:
+##Features
+
+This   is    a paragraph.
+
+Another paragraph.
+
+Expected output:
+
+## Features
+
+This is a paragraph.
+
+Another paragraph.
+
+Treat this as an example of the intended result, not permission to damage valid formatting.
+
+## FIX 2 — Custom project name in Project Analyzer
+
+Google's review reported that when a ZIP is uploaded, the analyzer may use the ZIP's internal folder name instead of the custom name entered by the user.
+
+Requirements:
+
+* Inspect how the custom project-name field and ZIP-derived folder name are handled.
+* If the user enters a non-empty custom project name, use it as the primary display name and in generated documentation.
+* If the custom name is empty, fall back to reliable project metadata, then the ZIP's internal root folder name.
+* If none is available, use a sensible generic fallback.
+* Trim leading and trailing whitespace from the custom name.
+* Ensure the chosen name is used consistently by README Studio and Documentation Pack.
+* Do not alter file parsing or project analysis unnecessarily.
+
+## REGRESSION TESTING
+
+After implementing the fixes, run the available tests and production build.
+
+Verify:
+
+1. Markdown headings receive correct spacing.
+2. Ordinary paragraphs do not contain unintended repeated spaces.
+3. Code blocks and indentation remain unchanged.
+4. Markdown lists and other common structures remain valid.
+5. A custom project name overrides the ZIP folder name.
+6. An empty custom name falls back appropriately.
+7. README generation still works.
+8. Project ZIP analysis still works.
+9. Documentation Pack and downloads still work.
+10. Existing Developer Utilities still work.
+11. The homepage and mobile layout remain unchanged.
+
+Report the actual result of each test. Do not claim a test passed unless it was executed successfully.
+
+## FINAL REPORT
+
+Tell me:
+
+* Which files you changed.
+* What each change fixes.
+* Which tests passed or failed.
+* Whether the production build succeeded.
+* Any remaining problems.
+
+Do not make unrelated improvements during this task. Preserve the current working application.
