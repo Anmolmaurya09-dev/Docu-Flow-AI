@@ -19,6 +19,7 @@ A free, local-first browser app for generating developer documentation, inspecti
 ## Where things live
 
 - `artifacts/docu-flow/src/App.tsx` — routes and tool interfaces
+- `artifacts/docu-flow/src/components/project-zip-upload.tsx` — shared in-browser ZIP picker and progress display
 - `artifacts/docu-flow/src/lib/docu.ts` — local Markdown, README, docs-pack, JSON, text-statistics, and `.gitignore` helpers
 - `artifacts/docu-flow/src/lib/analyzeZip.ts` — local project ZIP inspection
 - `artifacts/docu-flow/src/index.css` — app theme and responsive styling
@@ -28,7 +29,7 @@ A free, local-first browser app for generating developer documentation, inspecti
 
 - Keep Docu-Flow static and client-only; do not add a backend, database, account system, analytics, or AI API without an explicit product change.
 - Treat ZIP contents as untrusted text: never execute uploaded code, and do not persist project source.
-- Share only the analyzer's summary metadata with Documentation Pack, in memory for the current session.
+- Share detected metadata and supported README text with documentation tools only in current-session memory; never persist uploaded project contents.
 - Keep generated documentation template-based unless details come from user input or inspected project metadata; do not invent commands, features, or security findings.
 
 ## Product

@@ -3,12 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ProjectZipUpload } from '@/components/project-zip-upload';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
-import { Activity, ArrowDownToLine, ArrowLeft, ArrowRight, Check, Clipboard, FileArchive, FileText, FolderTree, Info, Layers3, LoaderCircle, LockKeyhole, Search, ShieldCheck, Sparkles, Wrench, Zap } from 'lucide-react';
+import { Activity, ArrowDownToLine, ArrowLeft, ArrowRight, Check, Clipboard, FileArchive, FileText, FolderTree, Info, Layers3, LockKeyhole, Search, ShieldCheck, Sparkles, Wrench, Zap } from 'lucide-react';
 import JSZip from 'jszip';
-import { analyzeZip } from './lib/analyzeZip';
-import { buildChangelogTemplate, buildPackReadme, buildStructureSummary, createDocs, emptyMeta, formatJson, formatMarkdown, markdownToSafeHtml, starterReadme, textStats, type ProjectMeta, makeGitignore } from './lib/docu';
+import { buildChangelogTemplate, buildPackReadme, buildReadmeDraft, buildStructureSummary, createDocs, emptyMeta, formatJson, formatMarkdown, markdownToSafeHtml, starterInstallationGuide, starterOnboardingGuide, starterReadme, textStats, type ProjectMeta, makeGitignore } from './lib/docu';
 
 const queryClient = new QueryClient();
 
@@ -70,47 +70,149 @@ function Home() {
   );
 }
 
-function ReadmeStudio() {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+function SourcePill({ value }: { value: string }) {
+  return <span className="source-pill">{value}</span>;
+}
+function fieldSource(value: string, detectedValue: string | undefined, source: string | undefined) {
+  if (source && value.trim() === (detectedValue || '').trim()) return `Detected · ${source}`;
+  if (value.trim()) return detectedValue ? 'Edited by you' : 'Provided by you';
+  return 'Not provided';
+}
+function ReadmeStudio({ sharedMeta, onAnalyzed }: { sharedMeta: ProjectMeta | null; onAnalyzed: (meta: ProjectMeta) => void }) {
+  const [name, setName] = useState(sharedMeta?.projectName || '');
+  const [description, setDescription] = useState(sharedMeta?.description || '');
   const [problem, setProblem] = useState('');
   const [features, setFeatures] = useState('');
-  const [technologies, setTechnologies] = useState('');
+  const [technologies, setTechnologies] = useState(sharedMeta?.technologies.join(', ') || '');
   const [installation, setInstallation] = useState('');
   const [usage, setUsage] = useState('');
   const [projectStatus, setProjectStatus] = useState('');
-  const [license, setLicense] = useState('');
-  const [authorLinks, setAuthorLinks] = useState('');
-  const [markdown, setMarkdown] = useState(starterReadme);
+  const [license, setLicense] = useState(sharedMeta?.license || '');
+  const [authorLinks, setAuthorLinks] = useState([sharedMeta?.author, sharedMeta?.repository].filter(Boolean).join(' · '));
+  const [markdown, setMarkdown] = useState(() => sharedMeta?.readmeFiles[0]?.content || (sharedMeta?.origin === 'zip' ? buildReadmeDraft(sharedMeta, {}) : starterReadme));
+  const [selectedReadme, setSelectedReadme] = useState(sharedMeta?.readmeFiles[0]?.path || '');
   const [tab, setTab] = useState<'edit'|'preview'>('edit');
   const [message, setMessage] = useState('');
-  const generated = useMemo(() => {
-    const project = name.trim() || 'Project name';
-    const featureLines = features.trim() ? features.split('\n').map((line) => `- ${line}`).join('\n') : '- [Add a verified feature]';
-    const techLines = technologies.trim() ? technologies.split(',').map((line) => `- ${line.trim()}`).filter(Boolean).join('\n') : '[Add verified technologies, if known.]';
-    return `# ${project}\n\n${description.trim() ? `> ${description.trim()}\n\n` : '> [Add a short, verified project description.]\n\n'}## Problem\n\n${problem.trim() || '[Describe the problem this project solves.]'}\n\n## Features\n\n${featureLines}\n\n## Technologies\n\n${techLines}\n\n## Installation\n\n${installation.trim() || '[Add tested installation instructions. No commands are inferred.]'}\n\n## Usage\n\n${usage.trim() || '[Add a usage example that matches the actual implementation.]'}\n\n## Project status\n\n${projectStatus.trim() || '[Add the current project status.]'}\n\n## License\n\n${license.trim() || '[Add the license used by this project.]'}\n\n## Author and links\n\n${authorLinks.trim() || '[Add an author name or project links (optional).]'}\n`;
-  }, [name, description, problem, features, technologies, installation, usage, projectStatus, license, authorLinks]);
+  const [optionalOpen, setOptionalOpen] = useState(false);
+  const draftMeta = useMemo<ProjectMeta>(() => {
+    const detected = sharedMeta || emptyMeta(name);
+    const detectedAuthorLinks = [detected.author, detected.repository].filter(Boolean).join(' · ');
+    return {
+      ...detected,
+      projectName: name.trim() || detected.projectName || 'Project name',
+      description: description.trim() || undefined,
+      technologies: technologies.trim() ? technologies.split(',').map((item) => item.trim()).filter(Boolean) : detected.technologies,
+      license: license.trim() || undefined,
+      author: authorLinks.trim() || detected.author,
+      sources: {
+        ...detected.sources,
+        projectName: !name.trim() || name.trim() === detected.projectName ? detected.sources.projectName : 'your input',
+        description: description.trim() === (detected.description || '').trim() ? detected.sources.description : description.trim() ? 'your input' : undefined,
+        technologies: !technologies.trim() || technologies.trim() === detected.technologies.join(', ') ? detected.sources.technologies : 'your input',
+        license: !license.trim() || license.trim() === (detected.license || '') ? detected.sources.license : 'your input',
+        author: !authorLinks.trim() || authorLinks.trim() === detectedAuthorLinks ? (detected.sources.author || detected.sources.repository) : 'your input',
+      },
+    };
+  }, [sharedMeta, name, description, technologies, license, authorLinks]);
+  const generated = useMemo(() => buildReadmeDraft(draftMeta, {
+    projectName: name,
+    description,
+    problem,
+    features,
+    technologies,
+    installation,
+    usage,
+    projectStatus,
+    license,
+    authorLinks,
+  }), [draftMeta, name, description, problem, features, technologies, installation, usage, projectStatus, license, authorLinks]);
   const act = async (fn: () => Promise<void>, success: string) => { try { await fn(); setMessage(success); } catch { setMessage('Clipboard access is unavailable. You can still select and copy the Markdown.'); } };
+  function handleAnalyzed(meta: ProjectMeta) {
+    onAnalyzed(meta);
+    setName(meta.projectName);
+    setDescription(meta.description || '');
+    setTechnologies(meta.technologies.join(', '));
+    setLicense(meta.license || '');
+    setAuthorLinks([meta.author, meta.repository].filter(Boolean).join(' · '));
+    const firstReadme = meta.readmeFiles[0];
+    setSelectedReadme(firstReadme?.path || '');
+    setMarkdown(firstReadme?.content || buildReadmeDraft(meta, {
+      projectName: meta.projectName,
+      description: meta.description,
+      technologies: meta.technologies.join(', '),
+      license: meta.license,
+      authorLinks: [meta.author, meta.repository].filter(Boolean).join(' · '),
+      problem,
+      features,
+      installation,
+      usage,
+      projectStatus,
+    }));
+    setTab('edit');
+    setMessage('Project analyzed locally. Detected details are labeled by source; missing facts remain prompts.');
+  }
+  function loadReadme(path: string) {
+    const readme = sharedMeta?.readmeFiles.find((entry) => entry.path === path);
+    if (!readme) return;
+    setSelectedReadme(path);
+    setMarkdown(readme.content);
+    setTab('edit');
+    setMessage(`Loaded existing README from ${path}.`);
+  }
+  function generateDraft() {
+    if (sharedMeta?.origin !== 'zip' && (!name.trim() || !description.trim())) {
+      setMessage('For a manual draft, enter a project name and short description, or upload a ZIP to prefill details.');
+      return;
+    }
+    setMarkdown(generated);
+    setTab('edit');
+    setMessage('Editable README draft generated from detected details and your input.');
+  }
   return (
-    <Layout><PageTitle kicker="DOCUMENTATION / 01" title="README Studio" description="Shape the first page of your project docs. Edit Markdown directly or start with a structured draft." />
-      <div style={{ display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16 }}><BackHome/><button className="btn btn-quiet" onClick={() => { setName('');setDescription('');setProblem('');setFeatures('');setTechnologies('');setInstallation('');setUsage('');setProjectStatus('');setLicense('');setAuthorLinks('');setMarkdown(starterReadme);setMessage('Starter template loaded.'); }} data-testid="button-readme-sample"><Sparkles size={15}/> Load template</button><button className="btn btn-quiet" onClick={() => { setMarkdown(generated);setTab('edit');setMessage('Draft generated from your details.'); }} data-testid="button-readme-generate"><FileText size={15}/> Generate draft</button><button className="btn btn-quiet" onClick={() => void act(() => copyText(markdown), 'Markdown copied.')} data-testid="button-readme-copy"><Clipboard size={15}/> Copy</button><button className="btn btn-primary" onClick={() => downloadText(`${(name.trim() || 'README').replace(/[^\w-]+/g,'-')}.md`,markdown)} data-testid="button-readme-download"><ArrowDownToLine size={15}/> Download .md</button><ToastLine message={message}/></div>
+    <Layout><PageTitle kicker="DOCUMENTATION / 01" title="README Studio" description="Start with your project ZIP, or enter a name and short description to create a manual draft." />
+      <div style={{ display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16 }}><BackHome/></div>
+      <div style={{ marginBottom:16 }}><ProjectZipUpload onAnalyzed={handleAnalyzed} testIdPrefix="readme-zip" title="Upload a project ZIP" /></div>
+      <div className="notice" style={{ marginBottom:16 }}>
+        {sharedMeta?.origin === 'zip'
+          ? `Detected project metadata is available for this session. ${selectedReadme ? `Existing README loaded from ${selectedReadme}.` : 'No existing README was found; the editor contains a metadata-based draft with prompts for missing facts.'}`
+          : 'Alternative: create manually below. Enter only the project name and short description; other details are optional.'}
+        {sharedMeta?.readmeFiles.length ? <label className="readme-picker-label" htmlFor="readme-source-select">Choose an existing README to edit
+          <select id="readme-source-select" className="field" value={selectedReadme} onChange={(event) => loadReadme(event.target.value)} data-testid="select-readme-source">
+            {sharedMeta.readmeFiles.map((item) => <option key={item.path} value={item.path}>{item.path}</option>)}
+          </select>
+        </label> : null}
+      </div>
+      <div style={{ display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16 }}>
+        <button className="btn btn-quiet" onClick={() => { setName('');setDescription('');setProblem('');setFeatures('');setTechnologies('');setInstallation('');setUsage('');setProjectStatus('');setLicense('');setAuthorLinks('');setSelectedReadme('');setMarkdown(starterReadme);setMessage('Template loaded. Enter a project name and short description to create a manual draft.'); }} data-testid="button-readme-sample"><Sparkles size={15}/> Load template</button>
+        <button className="btn btn-quiet" onClick={generateDraft} data-testid="button-readme-generate"><FileText size={15}/> Generate draft</button>
+        <button className="btn btn-quiet" onClick={() => void act(() => copyText(markdown), 'Markdown copied.')} data-testid="button-readme-copy"><Clipboard size={15}/> Copy</button>
+        <button className="btn btn-primary" onClick={() => downloadText(`${(name.trim() || 'README').replace(/[^\w-]+/g,'-')}.md`,markdown)} data-testid="button-readme-download"><ArrowDownToLine size={15}/> Download README.md</button>
+        <ToastLine message={message}/>
+      </div>
       <div className="split">
         <section className="panel" style={{ padding:20 }}>
-          <div className="eyebrow" style={{ marginBottom:15 }}>QUICK DETAILS</div>
-          <label className="field-label" htmlFor="readme-name">Project name</label><input id="readme-name" className="field" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. orbit-notes" data-testid="input-readme-name"/>
-          <label className="field-label" htmlFor="readme-desc" style={{ marginTop:16 }}>Short description</label><textarea id="readme-desc" className="field" rows={3} value={description} onChange={e=>setDescription(e.target.value)} placeholder="One sentence about what it does" data-testid="input-readme-description"/>
-          <label className="field-label" htmlFor="readme-problem" style={{ marginTop:16 }}>Problem it solves</label><textarea id="readme-problem" className="field" rows={3} value={problem} onChange={e=>setProblem(e.target.value)} placeholder="What problem does this project address?" data-testid="input-readme-problem"/>
-          <label className="field-label" htmlFor="readme-features" style={{ marginTop:16 }}>Features, one per line</label><textarea id="readme-features" className="field" rows={4} value={features} onChange={e=>setFeatures(e.target.value)} placeholder="A capability you have verified" data-testid="input-readme-features"/>
-          <label className="field-label" htmlFor="readme-technologies" style={{ marginTop:16 }}>Technologies used</label><input id="readme-technologies" className="field" value={technologies} onChange={e=>setTechnologies(e.target.value)} placeholder="React, TypeScript, ... (comma-separated)" data-testid="input-readme-technologies"/>
-          <label className="field-label" htmlFor="readme-installation" style={{ marginTop:16 }}>Installation instructions</label><textarea id="readme-installation" className="field code" rows={3} value={installation} onChange={e=>setInstallation(e.target.value)} placeholder="Add steps you have tested" data-testid="input-readme-installation"/>
-          <label className="field-label" htmlFor="readme-usage" style={{ marginTop:16 }}>Usage instructions</label><textarea id="readme-usage" className="field" rows={3} value={usage} onChange={e=>setUsage(e.target.value)} placeholder="Describe actual project usage" data-testid="input-readme-usage"/>
-          <label className="field-label" htmlFor="readme-status" style={{ marginTop:16 }}>Project status</label><input id="readme-status" className="field" value={projectStatus} onChange={e=>setProjectStatus(e.target.value)} placeholder="e.g. In development" data-testid="input-readme-status"/>
-          <label className="field-label" htmlFor="readme-license" style={{ marginTop:16 }}>License</label><input id="readme-license" className="field" value={license} onChange={e=>setLicense(e.target.value)} placeholder="e.g. MIT (if applicable)" data-testid="input-readme-license"/>
-          <label className="field-label" htmlFor="readme-author" style={{ marginTop:16 }}>Author or project links (optional)</label><input id="readme-author" className="field" value={authorLinks} onChange={e=>setAuthorLinks(e.target.value)} placeholder="Name, repository, or website" data-testid="input-readme-author"/>
-          <div className="notice" style={{ marginTop:16 }}>Drafts use prompts rather than invented commands or capabilities. Review every section against your project.</div>
+          <div className="eyebrow" style={{ marginBottom:15 }}>OR CREATE MANUALLY</div>
+          <label className="field-label" htmlFor="readme-name">Project name · required for manual draft <SourcePill value={fieldSource(name, sharedMeta?.projectName, sharedMeta?.sources.projectName)} /></label>
+          <input id="readme-name" className="field" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. orbit-notes" data-testid="input-readme-name"/>
+          <label className="field-label" htmlFor="readme-desc" style={{ marginTop:16 }}>Short description · required for manual draft <SourcePill value={fieldSource(description, sharedMeta?.description, sharedMeta?.sources.description)} /></label>
+          <textarea id="readme-desc" className="field" rows={3} value={description} onChange={e=>setDescription(e.target.value)} placeholder="One sentence about what it does" data-testid="input-readme-description"/>
+          <details className="optional-details" open={optionalOpen} onToggle={(event) => setOptionalOpen(event.currentTarget.open)} data-testid="details-readme-optional">
+            <summary>Optional details · features, technologies, setup, and more</summary>
+            <div className="optional-details-content">
+              <label className="field-label" htmlFor="readme-problem">Problem it solves</label><textarea id="readme-problem" className="field" rows={3} value={problem} onChange={e=>setProblem(e.target.value)} placeholder="Optional — describe the problem this project addresses" data-testid="input-readme-problem"/>
+              <label className="field-label" htmlFor="readme-features" style={{ marginTop:16 }}>Features, one per line</label><textarea id="readme-features" className="field" rows={3} value={features} onChange={e=>setFeatures(e.target.value)} placeholder="Optional — list capabilities you have verified" data-testid="input-readme-features"/>
+              <label className="field-label" htmlFor="readme-technologies" style={{ marginTop:16 }}>Technologies <SourcePill value={fieldSource(technologies, sharedMeta?.technologies.join(', '), sharedMeta?.sources.technologies)} /></label><input id="readme-technologies" className="field" value={technologies} onChange={e=>setTechnologies(e.target.value)} placeholder="Optional — detected technologies are prefilled" data-testid="input-readme-technologies"/>
+              <label className="field-label" htmlFor="readme-installation" style={{ marginTop:16 }}>Installation instructions</label><textarea id="readme-installation" className="field code" rows={3} value={installation} onChange={e=>setInstallation(e.target.value)} placeholder="Optional — add steps you have tested" data-testid="input-readme-installation"/>
+              <label className="field-label" htmlFor="readme-usage" style={{ marginTop:16 }}>Usage instructions</label><textarea id="readme-usage" className="field" rows={3} value={usage} onChange={e=>setUsage(e.target.value)} placeholder="Optional — describe actual project usage" data-testid="input-readme-usage"/>
+              <label className="field-label" htmlFor="readme-status" style={{ marginTop:16 }}>Project status</label><input id="readme-status" className="field" value={projectStatus} onChange={e=>setProjectStatus(e.target.value)} placeholder="Optional — e.g. In development" data-testid="input-readme-status"/>
+              <label className="field-label" htmlFor="readme-license" style={{ marginTop:16 }}>License <SourcePill value={fieldSource(license, sharedMeta?.license, sharedMeta?.sources.license)} /></label><input id="readme-license" className="field" value={license} onChange={e=>setLicense(e.target.value)} placeholder="Optional — detected license is prefilled when available" data-testid="input-readme-license"/>
+              <label className="field-label" htmlFor="readme-author" style={{ marginTop:16 }}>Author or project links <SourcePill value={fieldSource(authorLinks, [sharedMeta?.author, sharedMeta?.repository].filter(Boolean).join(' · '), sharedMeta?.sources.author || sharedMeta?.sources.repository)} /></label><input id="readme-author" className="field" value={authorLinks} onChange={e=>setAuthorLinks(e.target.value)} placeholder="Optional — name, repository, or website" data-testid="input-readme-author"/>
+            </div>
+          </details>
+          <div className="notice" style={{ marginTop:16 }}>Detected details carry a source label; your edits are marked as provided by you. Bracketed text is a template prompt. No commands or features are invented.</div>
         </section>
         <section className="panel" style={{ padding:20 }}>
-          <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:14 }}><div className="eyebrow">README.MD</div><div className="tab-row"><button className="tab" aria-selected={tab==='edit'} onClick={()=>setTab('edit')} data-testid="tab-readme-edit">Edit</button><button className="tab" aria-selected={tab==='preview'} onClick={()=>setTab('preview')} data-testid="tab-readme-preview">Preview</button></div></div>
+          <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:14 }}><div className="eyebrow">README.MD · {sharedMeta?.sources.readme ? `SOURCE: ${selectedReadme || sharedMeta.sources.readme}` : sharedMeta?.origin === 'zip' ? 'DRAFT' : 'MANUAL / TEMPLATE'}</div><div className="tab-row"><button className="tab" aria-selected={tab==='edit'} onClick={()=>setTab('edit')} data-testid="tab-readme-edit">Edit</button><button className="tab" aria-selected={tab==='preview'} onClick={()=>setTab('preview')} data-testid="tab-readme-preview">Preview</button></div></div>
           {tab==='edit' ? <textarea className="field code" style={{ minHeight:500,resize:'vertical' }} aria-label="Edit README Markdown" value={markdown} onChange={e=>setMarkdown(e.target.value)} data-testid="textarea-readme-markdown"/> : <div className="prose-preview" style={{ minHeight:500 }} dangerouslySetInnerHTML={{ __html:markdownToSafeHtml(markdown) }} data-testid="preview-readme-markdown"/>}
         </section>
       </div>
@@ -118,35 +220,26 @@ function ReadmeStudio() {
   );
 }
 
-function ProjectAnalyzer({ onAnalyzed }: { onAnalyzed: (meta: ProjectMeta) => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<ProjectMeta | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  async function run() {
-    if (!file) { setError('Choose a ZIP file first.');return; }
-    setBusy(true);setError('');setSuccess('');
-    try { const meta=await analyzeZip(file);setResult(meta);onAnalyzed(meta);setSuccess('Project inventory is ready. Metadata is available to Documentation Pack in this session only.'); }
-    catch(e) { setError(e instanceof Error ? e.message : 'Could not analyze this ZIP.');setResult(null); }
-    finally { setBusy(false); }
+function ProjectAnalyzer({ sharedMeta, onAnalyzed }: { sharedMeta: ProjectMeta | null; onAnalyzed: (meta: ProjectMeta) => void }) {
+  const [result, setResult] = useState<ProjectMeta | null>(sharedMeta?.origin === 'zip' ? sharedMeta : null);
+  function handleAnalyzed(meta: ProjectMeta) {
+    setResult(meta);
+    onAnalyzed(meta);
   }
   return <Layout><PageTitle kicker="PROJECT INSPECTION / 02" title="Project Analyzer" description="Get a small, readable project inventory from a ZIP. The archive is inspected locally; source files are never run."/>
     <div style={{ display:'flex',gap:10,marginBottom:16 }}><BackHome/><Link href="/documentation-pack" className="btn btn-quiet" data-testid="link-analyzer-docs">Open documentation pack <ArrowRight size={15}/></Link></div>
-    <section className="panel" style={{ padding:22 }}>
-      <div className="dropzone"><FileArchive size={28} color="#61d9e9"/><strong style={{ marginTop:12 }}>Choose a project ZIP</strong><span style={{ color:'#93a5b7',fontSize:12,marginTop:5 }}>Maximum 5 MB · up to 100 files</span>
-        <input type="file" accept=".zip,application/zip" aria-label="Choose project ZIP" onChange={e=>{setFile(e.target.files?.[0]||null);setError('');setSuccess('');}} style={{ marginTop:14,maxWidth:'100%',color:'#b9c8d6',fontSize:12 }} data-testid="input-project-zip"/>
-        {file && <span style={{ marginTop:8,fontSize:12,color:'#c9d6e1' }} data-testid="text-selected-zip">{file.name} · {(file.size/1024/1024).toFixed(2)} MB</span>}
-      </div>
-      <div style={{ display:'flex',gap:12,alignItems:'center',marginTop:16,flexWrap:'wrap' }}><button className="btn btn-primary" onClick={()=>void run()} disabled={busy} data-testid="button-analyze-zip">{busy?<><LoaderCircle size={15}/> Reading locally…</>:<><Activity size={15}/> Analyze ZIP</>}</button><ToastLine message={error} error/><ToastLine message={success}/></div>
-      <div className="notice" style={{ marginTop:18 }}>We skip node_modules, dist, build, .git, unsupported formats, and text files over 256 KB. The inventory is approximate and is not a security scan.</div>
-    </section>
+    <ProjectZipUpload onAnalyzed={handleAnalyzed} testIdPrefix="analyzer-zip" title="Choose a project ZIP to inspect" description="The archive is read only in your browser. Nothing is uploaded, and source files are never executed." />
+    <div className="notice" style={{ marginTop:12 }}>We skip node_modules, dist, build, .git, unsupported formats, and text files over 256 KB. The inventory is approximate and is not a security scan.</div>
     {result && <section style={{ marginTop:20 }} data-testid="section-analysis-results">
-      <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:14,flexWrap:'wrap' }}><div><div className="eyebrow">LOCAL INVENTORY</div><h2 style={{ margin:'7px 0 0',letterSpacing:'-.04em' }} data-testid="text-analysis-project">{result.projectName || 'Unnamed project'}</h2></div><button className="btn btn-quiet" onClick={()=>downloadText('project-analysis.txt',analysisReport(result))} data-testid="button-analysis-download"><ArrowDownToLine size={15}/> Download summary</button></div>
+      <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:14,flexWrap:'wrap' }}><div><div className="eyebrow">LOCAL INVENTORY · REUSED THIS SESSION</div><h2 style={{ margin:'7px 0 0',letterSpacing:'-.04em' }} data-testid="text-analysis-project">{result.projectName || 'Unnamed project'}</h2></div><button className="btn btn-quiet" onClick={()=>downloadText('project-analysis.txt',analysisReport(result))} data-testid="button-analysis-download"><ArrowDownToLine size={15}/> Download summary</button></div>
       <div className="tool-grid" style={{ marginBottom:16 }}><div className="stat-box"><strong data-testid="text-analysis-filecount">{result.fileCount}</strong><span>supported text files</span></div><div className="stat-box"><strong data-testid="text-analysis-lines">{result.lineEstimate.toLocaleString()}</strong><span>estimated lines</span></div></div>
-      <div className="split"><section className="panel" style={{ padding:20 }}><h3 style={{ marginTop:0,fontSize:14 }}>Identified from filenames</h3><p style={{ color:'#9dacbb',fontSize:13 }}>{result.technologies.length ? result.technologies.join(' · ') : 'No technologies identified from supported files.'}</p><h3 style={{ fontSize:14,marginTop:22 }}>Package metadata</h3>{result.packageName && <p className="code" style={{ color:'#c7d7e4' }}>{result.packageName}{result.description?` — ${result.description}`:''}</p>}<ListBlock title="Dependencies" items={result.dependencies}/><ListBlock title="Development dependencies" items={result.devDependencies}/><ListBlock title="Package scripts" items={Object.entries(result.scripts).map(([k,v])=>`${k}: ${v}`)}/></section>
+      <div className="split"><section className="panel" style={{ padding:20 }}><h3 style={{ marginTop:0,fontSize:14 }}>Detected project details</h3><p style={{ color:'#9dacbb',fontSize:13 }}>{result.technologies.length ? result.technologies.join(' · ') : 'No technologies identified from supported files.'}{result.sources.technologies ? ` · ${result.sources.technologies}` : ''}</p>{result.packageName && <p className="code" style={{ color:'#c7d7e4' }}>{result.packageName}{result.description?` — ${result.description}`:''} {result.sources.projectName ? `(${result.sources.projectName})` : ''}</p>}{result.license && <p style={{ color:'#c7d7e4',fontSize:12 }}>License: {result.license} · {result.sources.license}</p>}{result.author && <p style={{ color:'#c7d7e4',fontSize:12 }}>Author: {result.author} · {result.sources.author}</p>}{result.repository && <p style={{ color:'#c7d7e4',fontSize:12,overflowWrap:'anywhere' }}>Repository: {result.repository} · {result.sources.repository}</p>}<ListBlock title="Dependencies" items={result.dependencies}/><ListBlock title="Development dependencies" items={result.devDependencies}/><ListBlock title="Package scripts" items={Object.entries(result.scripts).map(([k,v])=>`${k}: ${v}`)}/><ListBlock title="Existing README files" items={result.readmeFiles.map((item)=>item.path)}/></section>
       <section className="panel" style={{ padding:20 }}><h3 style={{ marginTop:0,fontSize:14,display:'flex',gap:8,alignItems:'center' }}><FolderTree size={16} color="#62d9ea"/> Simplified file tree</h3><pre className="code" style={{ color:'#bbcad8',whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto' }} data-testid="text-analysis-tree">{result.tree.length ? result.tree.map(p=>`├─ ${p}`).join('\n') : 'No supported files found.'}</pre></section></div>
       {result.notes.map((note,i)=><div className="notice" key={i} style={{ marginTop:10 }} data-testid={`notice-analysis-${i}`}>{note}</div>)}
+      <div style={{ display:'flex',gap:10,flexWrap:'wrap',marginTop:16 }}>
+        <Link href="/readme-studio" className="btn btn-primary" data-testid="link-analysis-readme"><FileText size={15}/> Generate README</Link>
+        <Link href="/documentation-pack" className="btn btn-quiet" data-testid="link-analysis-pack"><Layers3 size={15}/> Create Documentation Pack</Link>
+      </div>
     </section>}
   </Layout>;
 }
@@ -154,7 +247,7 @@ function ListBlock({ title, items }: { title:string;items:string[] }) {
   return <div style={{ marginTop:13 }}><div style={{ fontSize:11,fontWeight:800,color:'#93a5b7',marginBottom:5 }}>{title}</div><div className="code" style={{ color:'#c9d5df',overflowWrap:'anywhere' }}>{items.length?items.join(', '):'None detected'}</div></div>;
 }
 function analysisReport(meta: ProjectMeta) {
-  return `PROJECT INVENTORY: ${meta.projectName}\n\nOrigin: Local ZIP inspection\nSupported text files: ${meta.fileCount}\nEstimated lines: ${meta.lineEstimate}\nTechnologies identified from files: ${meta.technologies.join(', ') || 'None identified'}\n\nDependencies: ${meta.dependencies.join(', ') || 'None detected'}\nDevelopment dependencies: ${meta.devDependencies.join(', ') || 'None detected'}\nScripts: ${Object.entries(meta.scripts).map(([k,v])=>`${k}: ${v}`).join(', ') || 'None detected'}\n\nSimplified file tree:\n${meta.tree.join('\n') || 'No supported files found.'}\n\n${meta.notes.join('\n')}`;
+  return `PROJECT INVENTORY: ${meta.projectName}\n\nOrigin: Local ZIP inspection\nProject name source: ${meta.sources.projectName || 'Not identified'}\nDescription: ${meta.description || 'Not detected'}${meta.sources.description ? ` (${meta.sources.description})` : ''}\nLicense: ${meta.license || 'Not detected'}\nAuthor: ${meta.author || 'Not detected'}\nRepository: ${meta.repository || 'Not detected'}\nSupported text files: ${meta.fileCount}\nEstimated lines: ${meta.lineEstimate}\nTechnologies identified from files: ${meta.technologies.join(', ') || 'None identified'}\n\nDependencies: ${meta.dependencies.join(', ') || 'None detected'}\nDevelopment dependencies: ${meta.devDependencies.join(', ') || 'None detected'}\nScripts: ${Object.entries(meta.scripts).map(([k,v])=>`${k}: ${v}`).join(', ') || 'None detected'}\nExisting README files: ${meta.readmeFiles.map((readme) => readme.path).join(', ') || 'None detected'}\n\nSimplified file tree:\n${meta.tree.join('\n') || 'No supported files found.'}\n\n${meta.notes.join('\n')}`;
 }
 
 function Utilities() {
@@ -196,29 +289,59 @@ function Utilities() {
   </Layout>;
 }
 
-function DocumentationPack({ sharedMeta }: { sharedMeta: ProjectMeta | null }) {
+function DocumentationPack({ sharedMeta, onAnalyzed }: { sharedMeta: ProjectMeta | null; onAnalyzed: (meta: ProjectMeta) => void }) {
   const [name,setName]=useState(sharedMeta?.projectName||'');
   const [description,setDescription]=useState(sharedMeta?.description||'');
   const [deps,setDeps]=useState(sharedMeta?.dependencies.join(', ')||'');
   const [devDeps,setDevDeps]=useState(sharedMeta?.devDependencies.join(', ')||'');
   const [readme,setReadme]=useState(()=>buildPackReadme(sharedMeta||emptyMeta()));
-  const [install,setInstall]=useState('');
-  const [gettingStarted,setGettingStarted]=useState('');
+  const [selectedReadme,setSelectedReadme]=useState(sharedMeta?.readmeFiles[0]?.path||'');
+  const [install,setInstall]=useState(starterInstallationGuide);
+  const [gettingStarted,setGettingStarted]=useState(starterOnboardingGuide);
   const [structure,setStructure]=useState(()=>buildStructureSummary(sharedMeta||emptyMeta()));
   const [message,setMessage]=useState('');
   const [preview,setPreview]=useState(false);
-  const meta=useMemo<ProjectMeta>(()=>({
-    ...(sharedMeta||emptyMeta(name)),
-    projectName:name||sharedMeta?.projectName||'Project name',
-    description,
-    dependencies:deps.split(',').map(x=>x.trim()).filter(Boolean),
-    devDependencies:devDeps.split(',').map(x=>x.trim()).filter(Boolean),
-  }),[sharedMeta,name,description,deps,devDeps]);
+  const meta=useMemo<ProjectMeta>(()=> {
+    const detected=sharedMeta||emptyMeta(name);
+    const dependencies=deps.split(',').map(x=>x.trim()).filter(Boolean);
+    const devDependencies=devDeps.split(',').map(x=>x.trim()).filter(Boolean);
+    return {
+      ...detected,
+      projectName:name||detected.projectName||'Project name',
+      description,
+      dependencies,
+      devDependencies,
+      sources:{
+        ...detected.sources,
+        projectName:!name.trim()||name.trim()===detected.projectName?detected.sources.projectName:'your input',
+        description:description.trim()===(detected.description||'').trim()?detected.sources.description:description.trim()?'your input':undefined,
+        dependencies:dependencies.join(', ')===detected.dependencies.join(', ')?detected.sources.dependencies:dependencies.length?'your input':undefined,
+        devDependencies:devDependencies.join(', ')===detected.devDependencies.join(', ')?detected.sources.devDependencies:devDependencies.length?'your input':undefined,
+      },
+    };
+  },[sharedMeta,name,description,deps,devDeps]);
   const docs=createDocs(meta,{readme,install,gettingStarted,structure});
-  const tabs=[['README', 'readme'],['Installation guide','install'],['Getting started','gettingStarted'],['Project structure','structure']] as const;
+  const tabs=[['README', 'readme'],['Installation guide','install'],['Onboarding guide','gettingStarted'],['Project structure','structure']] as const;
   const [active,setActive]=useState<'readme'|'install'|'gettingStarted'|'structure'>('readme');
   const docsRecord={readme:docs.readme,install:docs.install,gettingStarted:docs.gettingStarted,structure:docs.structure};
   const documentNames={readme:'README.md',install:'INSTALLATION.md',gettingStarted:'GETTING_STARTED.md',structure:'PROJECT_STRUCTURE.md'};
+  function handleAnalyzed(meta:ProjectMeta) {
+    onAnalyzed(meta);
+    setName(meta.projectName);
+    setDescription(meta.description||'');
+    setDeps(meta.dependencies.join(', '));
+    setDevDeps(meta.devDependencies.join(', '));
+    setReadme(buildPackReadme(meta));
+    setSelectedReadme(meta.readmeFiles[0]?.path||'');
+    setInstall(starterInstallationGuide());
+    setGettingStarted(starterOnboardingGuide());
+    setStructure(buildStructureSummary(meta));
+    setMessage('Project metadata loaded. Missing details remain clearly labeled prompts.');
+  }
+  function loadReadme(path:string) {
+    const found=sharedMeta?.readmeFiles.find((entry)=>entry.path===path);
+    if(found) { setSelectedReadme(path);setReadme(found.content);setMessage(`Loaded existing README from ${path}.`); }
+  }
   function updateActiveDocument(value:string) {
     if(active==='readme')setReadme(value);
     if(active==='install')setInstall(value);
@@ -235,14 +358,17 @@ function DocumentationPack({ sharedMeta }: { sharedMeta: ProjectMeta | null }) {
   }
   return <Layout><PageTitle kicker="DOCUMENT SET / 04" title="Documentation Pack" description="Create four editable project documents, then download them individually or together."/>
     <div style={{ display:'flex',gap:10,marginBottom:16,flexWrap:'wrap' }}><BackHome/><Link href="/project-analyzer" className="btn btn-quiet" data-testid="link-pack-analyzer"><Activity size={15}/> Analyze a ZIP</Link></div>
+    <div style={{ marginBottom:16 }}><ProjectZipUpload onAnalyzed={handleAnalyzed} testIdPrefix="pack-zip" title="Upload a project ZIP" description="Reuse this session's analysis or add a ZIP here. Only supported metadata and README text are held in memory." /></div>
     <section className="panel" style={{ padding:20,marginBottom:16 }}><div style={{ display:'flex',gap:10,alignItems:'center',marginBottom:10 }}><Info size={16} color="#67d9e9"/><strong style={{ fontSize:13 }}>Project details</strong></div>
-      <div className="notice" style={{ marginBottom:15 }}>{sharedMeta?.origin==='zip'?'ZIP metadata is prefilled from the Project Analyzer; edits to these fields are user-provided overrides. Uploaded source text is not retained.':'No ZIP metadata in this session. Details you enter are user-provided; bracketed prompts are template text, not project facts.'}</div>
-      <div className="split"><div><label className="field-label" htmlFor="pack-name">Project name</label><input className="field" id="pack-name" value={name} onChange={e=>setName(e.target.value)} placeholder="Project name" data-testid="input-pack-name"/><label className="field-label" htmlFor="pack-description" style={{ marginTop:12 }}>Description</label><input className="field" id="pack-description" value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional verified description" data-testid="input-pack-description"/></div><div><label className="field-label" htmlFor="pack-dependencies">Dependencies (comma-separated)</label><input className="field" id="pack-dependencies" value={deps} onChange={e=>setDeps(e.target.value)} placeholder="Manual entry, if known" data-testid="input-pack-dependencies"/><label className="field-label" htmlFor="pack-devdependencies" style={{ marginTop:12 }}>Development dependencies</label><input className="field" id="pack-devdependencies" value={devDeps} onChange={e=>setDevDeps(e.target.value)} placeholder="Manual entry, if known" data-testid="input-pack-devdependencies"/></div></div>
+      <div className="notice" style={{ marginBottom:15 }}>{sharedMeta?.origin==='zip'?'ZIP metadata is prefilled from this session. Values you edit are user-provided; detected values retain their source labels. Existing README text stays in memory only for this session.':'No ZIP metadata in this session. Project details are optional; bracketed prompts are templates, not project facts.'}</div>
+      <div className="split"><div><label className="field-label" htmlFor="pack-name">Project name <SourcePill value={fieldSource(name,sharedMeta?.projectName,sharedMeta?.sources.projectName)}/></label><input className="field" id="pack-name" value={name} onChange={e=>setName(e.target.value)} placeholder="Optional project name" data-testid="input-pack-name"/><label className="field-label" htmlFor="pack-description" style={{ marginTop:12 }}>Description <SourcePill value={fieldSource(description,sharedMeta?.description,sharedMeta?.sources.description)}/></label><input className="field" id="pack-description" value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional verified description" data-testid="input-pack-description"/></div><details className="optional-details"><summary>Optional package details</summary><div className="optional-details-content"><label className="field-label" htmlFor="pack-dependencies">Dependencies <SourcePill value={fieldSource(deps,sharedMeta?.dependencies.join(', '),sharedMeta?.sources.dependencies)}/></label><input className="field" id="pack-dependencies" value={deps} onChange={e=>setDeps(e.target.value)} placeholder="Manual entry, if known" data-testid="input-pack-dependencies"/><label className="field-label" htmlFor="pack-devdependencies" style={{ marginTop:12 }}>Development dependencies <SourcePill value={fieldSource(devDeps,sharedMeta?.devDependencies.join(', '),sharedMeta?.sources.devDependencies)}/></label><input className="field" id="pack-devdependencies" value={devDeps} onChange={e=>setDevDeps(e.target.value)} placeholder="Manual entry, if known" data-testid="input-pack-devdependencies"/></div></details></div>
     </section>
     <section className="panel" style={{ padding:20 }}>
-      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:15 }}><div className="tab-row">{tabs.map(([label,key])=><button key={key} className="tab" aria-selected={active===key} onClick={()=>{setActive(key);setPreview(false);}} data-testid={`tab-pack-${key}`}>{label}</button>)}</div><div style={{ display:'flex',gap:8,flexWrap:'wrap' }}><button className="btn btn-quiet" onClick={()=>{setReadme(buildPackReadme(meta));setStructure(buildStructureSummary(meta));setMessage('README and structure drafts refreshed from current details.');}} data-testid="button-pack-refresh-drafts"><Sparkles size={15}/> Refresh drafts</button><button className="btn btn-primary" onClick={()=>void downloadPack()} data-testid="button-pack-download"><FileArchive size={15}/> Download all as ZIP</button></div></div>
-      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:10 }}><label className="field-label" style={{ margin:0 }}>{documentNames[active]} {active==='install'?'— add verified steps':active==='gettingStarted'?'— add the real project workflow':active==='structure'?'— review detected structure':''}</label><div className="tab-row"><button className="tab" aria-selected={!preview} onClick={()=>setPreview(false)} data-testid="button-pack-edit">Edit</button><button className="tab" aria-selected={preview} onClick={()=>setPreview(true)} data-testid="button-pack-preview">Preview</button></div></div>
-      {preview ? <div className="prose-preview panel" style={{ minHeight:360,padding:20 }} dangerouslySetInnerHTML={{__html:markdownToSafeHtml(docsRecord[active])}} data-testid={`preview-pack-${active}`}/> : active==='readme' ? <textarea className="field code" rows={18} id="pack-readme" aria-label="Edit README Markdown" value={readme} onChange={e=>setReadme(e.target.value)} data-testid="textarea-pack-readme"/> : active==='install' ? <div><textarea className="field code" rows={15} id="pack-install" aria-label="Edit installation guide" value={install} onChange={e=>setInstall(e.target.value)} placeholder="## Prerequisites&#10;&#10;List verified prerequisites.&#10;&#10;## Install&#10;&#10;Add actual installation steps." data-testid="textarea-pack-install"/><div className="notice" style={{ marginTop:10 }}>Detected scripts and dependencies are metadata, not install instructions.</div></div> : active==='gettingStarted' ? <div><textarea className="field code" rows={15} id="pack-getting-started" aria-label="Edit getting started guide" value={gettingStarted} onChange={e=>setGettingStarted(e.target.value)} placeholder="## Before you begin&#10;&#10;Add verified prerequisites and first steps." data-testid="textarea-pack-getting-started"/><div className="notice" style={{ marginTop:10 }}>No workflow commands or project architecture are inferred.</div></div> : <div><textarea className="field code" rows={15} id="pack-structure" aria-label="Edit project structure summary" value={structure} onChange={e=>setStructure(e.target.value)} placeholder="Add verified project folders and files." data-testid="textarea-pack-structure"/><div className="notice" style={{ marginTop:10 }}>When no ZIP is supplied, the structure is labeled as a template until you add verified details.</div></div>}
+      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:15 }}><div className="tab-row">{tabs.map(([label,key])=><button key={key} className="tab" aria-selected={active===key} onClick={()=>{setActive(key);setPreview(false);}} data-testid={`tab-pack-${key}`}>{label}</button>)}</div><div style={{ display:'flex',gap:8,flexWrap:'wrap' }}><button className="btn btn-quiet" onClick={()=>{setReadme(sharedMeta?.readmeFiles.find((entry)=>entry.path===selectedReadme)?.content||buildPackReadme(meta));setStructure(buildStructureSummary(meta));setMessage('README and structure drafts refreshed from current details.');}} data-testid="button-pack-refresh-drafts"><Sparkles size={15}/> Refresh drafts</button><button className="btn btn-primary" onClick={()=>void downloadPack()} data-testid="button-pack-download"><FileArchive size={15}/> Download all as ZIP</button></div></div>
+      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:10 }}>{active==='readme'&&sharedMeta?.readmeFiles.length ? <label className="readme-picker-label" htmlFor="pack-readme-source">Use detected README
+          <select id="pack-readme-source" className="field" value={selectedReadme} onChange={(event)=>loadReadme(event.target.value)} data-testid="select-pack-readme-source">{sharedMeta.readmeFiles.map((item)=><option key={item.path} value={item.path}>{item.path}</option>)}</select>
+        </label> : <label className="field-label" style={{ margin:0 }}>{active==='gettingStarted'?'Onboarding guide · GETTING_STARTED.md':documentNames[active]} {active==='install'?'— add verified steps':active==='gettingStarted'?'— add the real project workflow':active==='structure'?'— review detected structure':''}</label>}<div className="tab-row"><button className="tab" aria-selected={!preview} onClick={()=>setPreview(false)} data-testid="button-pack-edit">Edit</button><button className="tab" aria-selected={preview} onClick={()=>setPreview(true)} data-testid="button-pack-preview">Preview</button></div></div>
+      {preview ? <div className="prose-preview panel" style={{ minHeight:360,padding:20 }} dangerouslySetInnerHTML={{__html:markdownToSafeHtml(docsRecord[active])}} data-testid={`preview-pack-${active}`}/> : active==='readme' ? <textarea className="field code" rows={18} id="pack-readme" aria-label="Edit README Markdown" value={readme} onChange={e=>setReadme(e.target.value)} data-testid="textarea-pack-readme"/> : active==='install' ? <div><textarea className="field code" rows={15} id="pack-install" aria-label="Edit installation guide" value={install} onChange={e=>setInstall(e.target.value)} placeholder="## Prerequisites&#10;&#10;List verified prerequisites.&#10;&#10;## Install&#10;&#10;Add actual installation steps." data-testid="textarea-pack-install"/><div className="notice" style={{ marginTop:10 }}>Detected scripts and dependencies are metadata, not install instructions.</div></div> : active==='gettingStarted' ? <div><textarea className="field code" rows={15} id="pack-getting-started" aria-label="Edit onboarding guide" value={gettingStarted} onChange={e=>setGettingStarted(e.target.value)} placeholder="## Before you begin&#10;&#10;Add verified prerequisites and first steps." data-testid="textarea-pack-getting-started"/><div className="notice" style={{ marginTop:10 }}>No workflow commands or project architecture are inferred.</div></div> : <div><textarea className="field code" rows={15} id="pack-structure" aria-label="Edit project structure summary" value={structure} onChange={e=>setStructure(e.target.value)} placeholder="Add verified project folders and files." data-testid="textarea-pack-structure"/><div className="notice" style={{ marginTop:10 }}>When no ZIP is supplied, the structure is labeled as a template until you add verified details.</div></div>}
       <div style={{ display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap',marginTop:15 }}><button className="btn btn-quiet" onClick={()=>downloadText(documentNames[active],docsRecord[active])} data-testid="button-pack-download-individual"><ArrowDownToLine size={15}/> Download this Markdown file</button><ToastLine message={message}/></div>
     </section>
     <section className="panel" style={{ padding:20,marginTop:16,marginBottom:30 }}><div className="eyebrow">STRUCTURE SUMMARY</div><div style={{ display:'flex',gap:14,flexWrap:'wrap',marginTop:13 }}><div className="stat-box"><strong>{meta.fileCount}</strong><span>supported files</span></div><div className="stat-box"><strong>{meta.lineEstimate}</strong><span>estimated lines</span></div><div className="stat-box"><strong>{meta.technologies.length?meta.technologies.join(', '):'Not provided'}</strong><span>technology hints</span></div></div><p style={{ color:'#91a2b3',fontSize:11 }}>Origin: {meta.origin==='zip'?'analyzer metadata shared in memory':'manual/template entry'}. No commands, architecture, tests, or security status are inferred.</p></section>
@@ -254,7 +380,7 @@ function Privacy() {
     <div style={{ display:'grid',gap:22 }}>
       <div><h2 style={{ fontSize:16 }}>Your files stay in the browser</h2><p style={{ color:'#a4b3c1',fontSize:13,lineHeight:1.8 }}>ZIP inspection, document generation, and utility processing happen locally in your browser. This app does not intentionally send your files or text anywhere, does not save project source in local storage, and does not run uploaded source code.</p></div>
       <div><h2 style={{ fontSize:16 }}>No accounts or analytics</h2><p style={{ color:'#a4b3c1',fontSize:13,lineHeight:1.8 }}>There are no accounts, database, analytics, or AI/API calls in this app. The “AI” in the product name does not mean an AI model is contacted; generation is template-based.</p></div>
-      <div><h2 style={{ fontSize:16 }}>Local limits</h2><p style={{ color:'#a4b3c1',fontSize:13,lineHeight:1.8 }}>Project Analyzer accepts ZIP files up to 5 MB and 100 supported files to inspect, skips selected bulky folders and unsupported or oversized text. Results are a simplified inventory—not a security scan or complete code review. Documentation Pack shares only analyzer summary metadata in memory for the current app session.</p></div>
+       <div><h2 style={{ fontSize:16 }}>Local limits</h2><p style={{ color:'#a4b3c1',fontSize:13,lineHeight:1.8 }}>Project Analyzer accepts ZIP files up to 5 MB and 100 supported files to inspect, skips selected bulky folders and unsupported or oversized text. Results are a simplified inventory—not a security scan or complete code review. Documentation tools keep detected metadata and supported README text only in browser memory for the current app session; they are not saved to local storage or a server.</p></div>
       <div><h2 style={{ fontSize:16 }}>Use care with sensitive content</h2><p style={{ color:'#a4b3c1',fontSize:13,lineHeight:1.8 }}>Do not paste private keys, passwords, tokens, confidential code, or other secrets into these tools. Feedback opens a draft in your email application; sending it is outside Docu-Flow.</p></div>
     </div>
     <div style={{ marginTop:24 }}><BackHome/></div>
@@ -268,10 +394,10 @@ function Router() {
   const [sharedMeta,setSharedMeta]=useState<ProjectMeta|null>(null);
   return <ErrorBoundary resetKey={location}><Switch>
     <Route path="/" component={Home}/>
-    <Route path="/readme-studio" component={ReadmeStudio}/>
-    <Route path="/project-analyzer"><ProjectAnalyzer onAnalyzed={setSharedMeta}/></Route>
+     <Route path="/readme-studio"><ReadmeStudio sharedMeta={sharedMeta} onAnalyzed={setSharedMeta}/></Route>
+     <Route path="/project-analyzer"><ProjectAnalyzer sharedMeta={sharedMeta} onAnalyzed={setSharedMeta}/></Route>
     <Route path="/developer-utilities" component={Utilities}/>
-    <Route path="/documentation-pack"><DocumentationPack sharedMeta={sharedMeta}/></Route>
+     <Route path="/documentation-pack"><DocumentationPack sharedMeta={sharedMeta} onAnalyzed={setSharedMeta}/></Route>
     <Route path="/privacy" component={Privacy}/>
     <Route path="/about" component={About}/>
     <Route component={NotFound}/>

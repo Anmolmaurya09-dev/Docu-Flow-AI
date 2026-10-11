@@ -9,6 +9,23 @@ export type ProjectMeta = {
   dependencies: string[];
   devDependencies: string[];
   scripts: Record<string, string>;
+  license?: string;
+  author?: string;
+  repository?: string;
+  readmeFiles: Array<{ path: string; content: string }>;
+  sources: {
+    projectName?: string;
+    description?: string;
+    dependencies?: string;
+    devDependencies?: string;
+    scripts?: string;
+    license?: string;
+    author?: string;
+    repository?: string;
+    technologies?: string;
+    readme?: string;
+    structure?: string;
+  };
   origin: 'zip' | 'template';
   notes: string[];
 };
@@ -97,14 +114,25 @@ export function buildChangelogTemplate(name: string): string {
   return `# Changelog\n\nAll notable changes to **${project}** will be documented here.\n\n## [Unreleased]\n\n### Added\n- \n\n### Changed\n- \n\n### Fixed\n- \n`;
 }
 
+function fieldProvenance(value: string | undefined, source: string | undefined) {
+  if (source === 'your input') return 'Provided by you';
+  if (source) return `Detected from ${source}`;
+  if (!value?.trim() || value.trim() === 'Project name' || value.trim().startsWith('[Add ')) return 'Not detected; template prompt';
+  return value?.trim() ? 'Provided by you' : 'Not detected; template prompt';
+}
+
 export function buildPackReadme(meta: ProjectMeta): string {
-  const source = meta.origin === 'zip' ? 'Based on metadata from a local ZIP inventory; details edited above are user-provided overrides. Review before publishing.' : 'Template-based draft; details you enter are user-provided and bracketed text is a prompt.';
+  if (meta.readmeFiles[0]?.content) return meta.readmeFiles[0].content;
+  const source = meta.origin === 'zip' ? 'Detected fields below include their source. Features and instructions are not inferred.' : 'Bracketed text is a template prompt; project-specific facts must come from your input.';
   const deps = meta.dependencies.length ? meta.dependencies.map((item) => `- \`${item}\``).join('\n') : 'No dependencies were provided.';
   const devDeps = meta.devDependencies.length ? meta.devDependencies.map((item) => `- \`${item}\``).join('\n') : 'No development dependencies were provided.';
   const scripts = Object.entries(meta.scripts).map(([scriptName, command]) => `- \`${scriptName}\`: \`${command}\``).join('\n') || 'No package scripts were provided.';
+  const technologies = meta.technologies.length ? meta.technologies.map((technology) => `- ${technology} (${fieldProvenance(technology, meta.sources.technologies)})`).join('\n') : '[Add technologies used, if known.]';
   return `# ${meta.projectName || 'Project name'}
 
 > ${source}
+
+> Project name: ${fieldProvenance(meta.projectName, meta.sources.projectName)} · Description: ${fieldProvenance(meta.description, meta.sources.description)}
 
 ${meta.description || '[Add a short, verified description of this project.]'}
 
@@ -118,19 +146,19 @@ ${meta.description || '[Add a short, verified description of this project.]'}
 
 ## Technologies
 
-${meta.technologies.length ? meta.technologies.map((technology) => `- ${technology} (identified from inspected files)`).join('\n') : '[Add technologies used, if known.]'}
+${technologies}
 
-## Dependencies
+## Detected dependencies
 
-${deps}
+${meta.dependencies.length ? `${deps}\n\n_Source: ${fieldProvenance(meta.dependencies.join(', '), meta.sources.dependencies)}._` : deps}
 
-## Development dependencies
+## Detected development dependencies
 
-${devDeps}
+${meta.devDependencies.length ? `${devDeps}\n\n_Source: ${fieldProvenance(meta.devDependencies.join(', '), meta.sources.devDependencies)}._` : devDeps}
 
 ## Available package scripts
 
-${scripts}
+${meta.scripts && Object.keys(meta.scripts).length ? `${scripts}\n\n_Source: ${fieldProvenance(Object.keys(meta.scripts).join(', '), meta.sources.scripts)}._` : scripts}
 
 ## Installation
 
@@ -146,11 +174,101 @@ ${scripts}
 
 ## License
 
-[Add the license used by this project.]
+${meta.license || '[Add the license used by this project.]'} · ${fieldProvenance(meta.license, meta.sources.license)}
 
 ## Author and links
 
-[Add an author name or project links (optional).]
+${[meta.author, meta.repository].filter(Boolean).join(' · ') || '[Add an author name or project links (optional).]'} · ${fieldProvenance([meta.author, meta.repository].filter(Boolean).join(' · '), meta.sources.author || meta.sources.repository)}
+`;
+}
+
+export type ReadmeDraftFields = {
+  projectName?: string;
+  description?: string;
+  problem?: string;
+  features?: string;
+  technologies?: string;
+  installation?: string;
+  usage?: string;
+  projectStatus?: string;
+  license?: string;
+  authorLinks?: string;
+};
+
+export function buildReadmeDraft(meta: ProjectMeta, fields: ReadmeDraftFields): string {
+  const projectName = fields.projectName?.trim() || meta.projectName || 'Project name';
+  const description = fields.description?.trim() || meta.description;
+  const technologies = fields.technologies?.trim()
+    ? fields.technologies.split(',').map((value) => value.trim()).filter(Boolean)
+    : meta.technologies;
+  const dependencies = meta.dependencies.length ? meta.dependencies.map((value) => `- \`${value}\``).join('\n') : 'No dependency metadata detected.';
+  const devDependencies = meta.devDependencies.length ? meta.devDependencies.map((value) => `- \`${value}\``).join('\n') : 'No development dependency metadata detected.';
+  const scripts = Object.entries(meta.scripts).map(([name, command]) => `- \`${name}\`: \`${command}\``).join('\n') || 'No package scripts detected.';
+  const detectedNote = meta.origin === 'zip'
+    ? 'Detected values and sources are listed below. Installation commands and project features are not inferred.'
+    : 'Bracketed text is a template prompt. Project-specific details must come from your input.';
+  const authorLinks = fields.authorLinks?.trim() || [meta.author, meta.repository].filter(Boolean).join(' · ');
+  return `# ${projectName}
+
+> ${description || '[Add a short, verified project description.]'}
+
+> ${detectedNote}
+
+## Information sources
+
+- Project name: ${fieldProvenance(projectName, meta.sources.projectName)}
+- Description: ${fieldProvenance(description, meta.sources.description)}
+- Technologies: ${fieldProvenance(technologies.join(', '), meta.sources.technologies)}
+- Dependencies: ${fieldProvenance(meta.dependencies.join(', '), meta.sources.dependencies)}
+- Development dependencies: ${fieldProvenance(meta.devDependencies.join(', '), meta.sources.devDependencies)}
+- Package scripts: ${fieldProvenance(Object.keys(meta.scripts).join(', '), meta.sources.scripts)}
+- License: ${fieldProvenance(fields.license?.trim() || meta.license, fields.license?.trim() && fields.license.trim() !== meta.license ? 'your input' : meta.sources.license)}
+- Author and links: ${fieldProvenance(authorLinks, fields.authorLinks?.trim() && fields.authorLinks.trim() !== [meta.author, meta.repository].filter(Boolean).join(' · ') ? 'your input' : meta.sources.author || meta.sources.repository)}
+- Problem, features, installation, usage, and project status: ${fields.problem?.trim() || fields.features?.trim() || fields.installation?.trim() || fields.usage?.trim() || fields.projectStatus?.trim() ? 'Provided by you where entered; remaining bracketed fields are template prompts' : 'Template prompts; no project-specific details were detected'}
+
+## Problem
+
+${fields.problem?.trim() || '[Describe the problem this project solves.]'}
+
+## Features
+
+${fields.features?.trim() ? fields.features.split('\n').map((feature) => `- ${feature.trim()}`).filter((feature) => feature !== '-').join('\n') : '- [Add a verified feature.]'}
+
+## Technologies
+
+${technologies.length ? technologies.map((technology) => `- ${technology} (${meta.sources.technologies || 'provided by you'})`).join('\n') : '[Add technologies used, if known.]'}
+
+## Detected dependencies
+
+${dependencies}
+
+## Detected development dependencies
+
+${devDependencies}
+
+## Available package scripts
+
+${scripts}
+
+## Installation
+
+${fields.installation?.trim() || '[Add tested installation instructions. No commands are inferred.]'}
+
+## Usage
+
+${fields.usage?.trim() || '[Add a usage example that matches the actual implementation.]'}
+
+## Project status
+
+${fields.projectStatus?.trim() || '[Add the current project status.]'}
+
+## License
+
+${fields.license?.trim() || meta.license || '[Add the license used by this project.]'}
+
+## Author and links
+
+${authorLinks || '[Add an author name or project links (optional).]'}
 `;
 }
 
@@ -185,14 +303,34 @@ ${meta.notes.length ? meta.notes.map((note) => `- ${note}`).join('\n') : 'No ZIP
 `;
 }
 
+export function starterInstallationGuide() {
+  return `## Prerequisites
+
+Add verified prerequisites for this project.
+
+## Install
+
+Add tested installation steps here. No install commands are inferred.`;
+}
+
+export function starterOnboardingGuide() {
+  return `## Before you begin
+
+Add verified prerequisites.
+
+## First steps
+
+Describe the first steps using the actual project workflow.`;
+}
+
 export function createDocs(meta: ProjectMeta, fields: { readme: string; install: string; gettingStarted: string; structure: string }) {
   const name = meta.projectName || 'Project name';
   const deps = meta.dependencies.length ? meta.dependencies.map((x) => `- \`${x}\``).join('\n') : 'No dependencies provided or found in available project metadata.';
   const scripts = Object.entries(meta.scripts).length ? Object.entries(meta.scripts).map(([k,v]) => `- \`${k}\`: \`${v}\``).join('\n') : 'No package scripts detected.';
   const source = meta.origin === 'zip' ? 'ZIP-derived metadata is included below; any details you add here are user-provided.' : 'Template-generated prompts are placeholders; any details you add here are user-provided. No ZIP metadata was supplied.';
   const dependencyLabel = meta.origin === 'zip' ? 'Dependencies in Project details (ZIP-prefilled unless edited)' : 'Dependencies supplied manually';
-  const install = `# Installation guide: ${name}\n\n> ${source}\n\n${fields.install || `## Prerequisites\n\nAdd verified prerequisites for this project.\n\n## Install\n\nAdd tested installation steps here. No install commands are inferred.`}\n\n## Available package scripts\n\n${scripts}\n\n## ${dependencyLabel}\n\n${deps}\n\n> Verify details and add actual commands before using this guide.`;
-  const start = `# Getting started: ${name}\n\n> ${source}\n\n${fields.gettingStarted || `## Before you begin\n\nAdd verified prerequisites.\n\n## First steps\n\nDescribe the first steps using the actual project workflow.`}\n\n## Available files\n\n${meta.tree.length ? '```text\n' + meta.tree.slice(0, 30).join('\n') + '\n```' : 'No project file structure was provided. Add a verified structure summary.'}\n\n> This guide is a template. Verify details against the codebase.`;
+  const install = `# Installation guide: ${name}\n\n> ${source}\n\n${fields.install || starterInstallationGuide()}\n\n## Available package scripts\n\n${scripts}\n\n## ${dependencyLabel}\n\n${deps}\n\n> Verify details and add actual commands before using this guide.`;
+  const start = `# Getting started: ${name}\n\n> ${source}\n\n${fields.gettingStarted || starterOnboardingGuide()}\n\n## Available files\n\n${meta.tree.length ? '```text\n' + meta.tree.slice(0, 30).join('\n') + '\n```' : 'No project file structure was provided. Add a verified structure summary.'}\n\n> This guide is a template. Verify details against the codebase.`;
   return { readme: fields.readme, install, gettingStarted: start, structure: fields.structure };
 }
 
@@ -214,5 +352,5 @@ export function markdownToSafeHtml(markdown: string): string {
 }
 
 export function emptyMeta(projectName = ''): ProjectMeta {
-  return { projectName, fileCount: 0, lineEstimate: 0, tree: [], technologies: [], dependencies: [], devDependencies: [], scripts: {}, origin: 'template', notes: [] };
+  return { projectName, fileCount: 0, lineEstimate: 0, tree: [], technologies: [], dependencies: [], devDependencies: [], scripts: {}, readmeFiles: [], sources: {}, origin: 'template', notes: [] };
 }
