@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { emptyMeta, type ProjectMeta } from './docu';
+import { emptyMeta, type ProjectMeta } from './docu.ts';
 
 const MAX_ZIP = 5 * 1024 * 1024;
 const MAX_FILES = 100;
@@ -41,6 +41,7 @@ export async function analyzeZip(file: File, onProgress?: (progress: AnalyzeProg
     if (paths.length && paths.every((parts) => parts.length > 1 && parts[0] === paths[0][0])) return `${paths[0][0]}/`;
     return '';
   })();
+  const rootFolderName = rootPrefix.replace(/\/$/, '');
   const candidates = allFiles.filter((entry) => {
     const relative = (entry.name.startsWith(rootPrefix) ? entry.name.slice(rootPrefix.length) : entry.name).replace(/^\/+/, '');
     return relative && !SKIP.test(relative) && (TEXT_EXT.test(relative) || /(^|\/)(Dockerfile|Makefile|\.gitignore)$/.test(relative));
@@ -133,8 +134,7 @@ export async function analyzeZip(file: File, onProgress?: (progress: AnalyzeProg
     : rawRepository && typeof rawRepository === 'object' && !Array.isArray(rawRepository) && typeof (rawRepository as Record<string, unknown>).url === 'string'
       ? String((rawRepository as Record<string, unknown>).url)
       : undefined;
-  const archiveName = file.name.replace(/\.zip$/i, '');
-  const projectName = packageName || readmeDetails.title || archiveName;
+  const projectName = packageName || readmeDetails.title || rootFolderName || 'Untitled project';
   const description = packageDescription || readmeDetails.description;
   if (!kept.length) notes.push('No supported text files were found. The archive may contain only binary or unsupported files.');
   if (!technologies.length) notes.push('No technologies could be identified from the supported files that were inspected.');
@@ -142,6 +142,7 @@ export async function analyzeZip(file: File, onProgress?: (progress: AnalyzeProg
   return {
     ...emptyMeta(projectName),
     projectName,
+    detectedProjectName: projectName,
     packageName: packageName || undefined,
     description: description || undefined,
     dependencies: objList(rootPackage.dependencies),
@@ -152,7 +153,7 @@ export async function analyzeZip(file: File, onProgress?: (progress: AnalyzeProg
     repository,
     readmeFiles,
     sources: {
-      projectName: packageName ? 'package.json' : readmeDetails.title ? readmeFiles[0]?.path : 'ZIP file name (fallback)',
+      projectName: packageName ? 'package.json' : readmeDetails.title ? readmeFiles[0]?.path : rootFolderName ? 'ZIP root folder' : 'generic fallback',
       description: packageDescription ? 'package.json' : readmeDetails.description ? readmeFiles[0]?.path : undefined,
       dependencies: packageJson && Object.keys(objList(rootPackage.dependencies)).length ? 'package.json' : undefined,
       devDependencies: packageJson && Object.keys(objList(rootPackage.devDependencies)).length ? 'package.json' : undefined,

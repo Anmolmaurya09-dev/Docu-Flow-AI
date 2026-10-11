@@ -8,7 +8,7 @@ import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { Activity, ArrowDownToLine, ArrowLeft, ArrowRight, Check, Clipboard, FileArchive, FileText, FolderTree, Info, Layers3, LockKeyhole, Search, ShieldCheck, Sparkles, Wrench, Zap } from 'lucide-react';
 import JSZip from 'jszip';
-import { buildChangelogTemplate, buildPackReadme, buildReadmeDraft, buildStructureSummary, createDocs, emptyMeta, formatJson, formatMarkdown, markdownToSafeHtml, starterInstallationGuide, starterOnboardingGuide, starterReadme, textStats, type ProjectMeta, makeGitignore } from './lib/docu';
+import { applyProjectName, buildChangelogTemplate, buildPackReadme, buildReadmeDraft, buildStructureSummary, createDocs, emptyMeta, formatJson, formatMarkdown, markdownToSafeHtml, starterInstallationGuide, starterOnboardingGuide, starterReadme, textStats, type ProjectMeta, makeGitignore } from './lib/docu';
 
 const queryClient = new QueryClient();
 
@@ -221,13 +221,16 @@ function ReadmeStudio({ sharedMeta, onAnalyzed }: { sharedMeta: ProjectMeta | nu
 }
 
 function ProjectAnalyzer({ sharedMeta, onAnalyzed }: { sharedMeta: ProjectMeta | null; onAnalyzed: (meta: ProjectMeta) => void }) {
-  const [result, setResult] = useState<ProjectMeta | null>(sharedMeta?.origin === 'zip' ? sharedMeta : null);
+  const [analysisMeta, setAnalysisMeta] = useState<ProjectMeta | null>(sharedMeta?.origin === 'zip' ? sharedMeta : null);
+  const [customName, setCustomName] = useState(sharedMeta?.sources.projectName === 'your input' ? sharedMeta.projectName : '');
+  const result = useMemo(() => analysisMeta ? applyProjectName(analysisMeta, customName) : null, [analysisMeta, customName]);
   function handleAnalyzed(meta: ProjectMeta) {
-    setResult(meta);
-    onAnalyzed(meta);
+    setAnalysisMeta(meta);
+    onAnalyzed(applyProjectName(meta, customName));
   }
   return <Layout><PageTitle kicker="PROJECT INSPECTION / 02" title="Project Analyzer" description="Get a small, readable project inventory from a ZIP. The archive is inspected locally; source files are never run."/>
     <div style={{ display:'flex',gap:10,marginBottom:16 }}><BackHome/><Link href="/documentation-pack" className="btn btn-quiet" data-testid="link-analyzer-docs">Open documentation pack <ArrowRight size={15}/></Link></div>
+    <div style={{ marginBottom:12 }}><label className="field-label" htmlFor="analyzer-custom-name">Custom project name (optional)</label><input className="field" id="analyzer-custom-name" value={customName} onChange={event=>{const value=event.target.value;setCustomName(value);if(analysisMeta)onAnalyzed(applyProjectName(analysisMeta,value));}} placeholder="Uses detected project name when blank" data-testid="input-analyzer-project-name"/><div className="notice" style={{ marginTop:8 }}>Leave blank to use detected metadata, then the ZIP’s root folder name.</div></div>
     <ProjectZipUpload onAnalyzed={handleAnalyzed} testIdPrefix="analyzer-zip" title="Choose a project ZIP to inspect" description="The archive is read only in your browser. Nothing is uploaded, and source files are never executed." />
     <div className="notice" style={{ marginTop:12 }}>We skip node_modules, dist, build, .git, unsupported formats, and text files over 256 KB. The inventory is approximate and is not a security scan.</div>
     {result && <section style={{ marginTop:20 }} data-testid="section-analysis-results">
@@ -307,7 +310,7 @@ function DocumentationPack({ sharedMeta, onAnalyzed }: { sharedMeta: ProjectMeta
     const devDependencies=devDeps.split(',').map(x=>x.trim()).filter(Boolean);
     return {
       ...detected,
-      projectName:name||detected.projectName||'Project name',
+      projectName:name.trim()||detected.projectName||'Untitled project',
       description,
       dependencies,
       devDependencies,

@@ -1,5 +1,6 @@
 export type ProjectMeta = {
   projectName: string;
+  detectedProjectName?: string;
   fileCount: number;
   lineEstimate: number;
   tree: string[];
@@ -72,19 +73,206 @@ export function formatJson(input: string): { output?: string; error?: string } {
   catch (e) { return { error: e instanceof Error ? e.message : 'This is not valid JSON.' }; }
 }
 
-export function formatMarkdown(input: string): string {
-  let inFence = false;
-  const normalized = input.replace(/\r\n/g, '\n').split('\n').map((line) => {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-      return line;
+function isEscaped(value: string, index: number) {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor--) backslashes++;
+  return backslashes % 2 === 1;
+}
+
+function findBracketEnd(value: string, start: number) {
+  let depth = 0;
+  for (let cursor = start; cursor < value.length; cursor++) {
+    if (isEscaped(value, cursor)) continue;
+    if (value[cursor] === '[') depth++;
+    if (value[cursor] === ']' && --depth === 0) return cursor;
+  }
+  return -1;
+}
+
+function findInlineLinkEnd(value: string, start: number) {
+  const bracketStart = value[start] === '!' && value[start + 1] === '[' ? start + 1 : value[start] === '[' ? start : -1;
+  if (bracketStart < 0) return -1;
+  const labelEnd = findBracketEnd(value, bracketStart);
+  if (labelEnd < 0) return -1;
+  const afterLabel = labelEnd + 1;
+  if (value[afterLabel] === '[') {
+    const referenceEnd = findBracketEnd(value, afterLabel);
+    return referenceEnd >= 0 ? referenceEnd + 1 : -1;
+  }
+  if (value[afterLabel] !== '(') return -1;
+  let depth = 1;
+  for (let cursor = afterLabel + 1; cursor < value.length; cursor++) {
+    if (isEscaped(value, cursor)) continue;
+    if (value[cursor] === '(') depth++;
+    if (value[cursor] === ')' && --depth === 0) return cursor + 1;
+  }
+  return -1;
+}
+
+function collapseMarkdownText(value: string, initialCodeTicks = 0) {
+  let output = '';
+  let plain = '';
+  let codeTicks = initialCodeTicks;
+  const flush = () => {
+    output += plain.replace(/[ \t]{2,}/g, ' ');
+    plain = '';
+  };
+  for (let cursor = 0; cursor < value.length;) {
+    if (codeTicks) {
+      let close = -1;
+      for (let probe = cursor; probe < value.length;) {
+        probe = value.indexOf('`', probe);
+        if (probe < 0) break;
+        let runEnd = probe + 1;
+        while (value[runEnd] === '`') runEnd++;
+        if (!isEscaped(value, probe) && runEnd - probe === codeTicks) { close = probe; break; }
+        probe = runEnd;
+      }
+      if (close < 0) return { text: output + plain + value.slice(cursor), codeTicks };
+      output += value.slice(cursor, close + codeTicks);
+      cursor = close + codeTicks;
+      codeTicks = 0;
+      continue;
     }
-    if (inFence) return line;
-    if (/^\s*#{1,6}\s/.test(line)) return line.trimEnd();
-    if (/^\s*[-*]\s+/.test(line)) return line.replace(/^(\s*)[-*]\s+/, '$1- ').replace(/[ \t]+$/g, '');
-    return line.replace(/[ \t]+$/g, '');
-  }).join('\n');
-  return normalized.replace(/\n{3,}/g, '\n\n').trim();
+    if (value[cursor] === '\\' && cursor + 1 < value.length) {
+      plain += value.slice(cursor, cursor + 2);
+      cursor += 2;
+      continue;
+    }
+    if (value[cursor] === '`') {
+      let runEnd = cursor + 1;
+      while (value[runEnd] === '`') runEnd++;
+      const runLength = runEnd - cursor;
+      let close = -1;
+      for (let probe = runEnd; probe < value.length;) {
+        probe = value.indexOf('`', probe);
+        if (probe < 0) break;
+        let candidateEnd = probe + 1;
+        while (value[candidateEnd] === '`') candidateEnd++;
+        if (!isEscaped(value, probe) && candidateEnd - probe === runLength) { close = probe; break; }
+        probe = candidateEnd;
+      }
+      if (close < 0) {
+        flush();
+        return { text: output + value.slice(cursor), codeTicks: runLength };
+      }
+      flush();
+      output += value.slice(cursor, close + runLength);
+      cursor = close + runLength;
+      continue;
+    }
+    const linkEnd = value[cursor] === '[' || (value[cursor] === '!' && value[cursor + 1] === '[')
+      ? findInlineLinkEnd(value, cursor)
+      : -1;
+    if (linkEnd >= 0) {
+      flush();
+      output += value.slice(cursor, linkEnd);
+      cursor = linkEnd;
+      continue;
+    }
+    plain += value[cursor];
+    cursor++;
+  }
+  flush();
+  return { text: output, codeTicks };
+}
+
+function isIndentedCode(line: string) {
+  return /^(?: {4,}|\t)/.test(line);
+}
+
+function normalizeMarkdownLine(line: string, initialCodeTicks = 0) {
+  const hardBreak = / {2,}$/.test(line);
+  const content = hardBreak ? line.replace(/ +$/, '') : line.replace(/[ \t]+$/, '');
+  const suffix = hardBreak ? '  ' : '';
+  if (content.includes('|') || /^\s{0,3}\[[^\]]+\]:/.test(content) || /<\/?[A-Za-z][^>]*>/.test(content)) {
+    return { text: content + suffix, codeTicks: initialCodeTicks };
+  }
+
+  const quote = content.match(/^( {0,3}>[ \t]?)+/);
+  let prefix = quote?.[0] || '';
+  let body = content.slice(prefix.length);
+  if (prefix && isIndentedCode(body)) return { text: line, codeTicks: initialCodeTicks };
+  if (prefix) body = body.replace(/^[ \t]+/, '');
+
+  const heading = body.match(/^( {0,3})(#{1,6})(?!#)[ \t]*(.*)$/);
+  if (heading && heading[3]) {
+    const normalized = collapseMarkdownText(heading[3], initialCodeTicks);
+    return { text: `${prefix}${heading[1]}${heading[2]} ${normalized.text}${suffix}`, codeTicks: normalized.codeTicks };
+  }
+
+  const list = body.match(/^([ \t]*)([-*+]|\d{1,9}[.)])[ \t]+(.*)$/);
+  if (list) {
+    const marker = list[2] === '*' ? '-' : list[2];
+    const normalized = collapseMarkdownText(list[3], initialCodeTicks);
+    return { text: `${prefix}${list[1]}${marker} ${normalized.text}${suffix}`, codeTicks: normalized.codeTicks };
+  }
+
+  const indent = body.match(/^ {0,3}/)?.[0] || '';
+  const normalized = collapseMarkdownText(body.slice(indent.length), initialCodeTicks);
+  return { text: `${prefix}${indent}${normalized.text}${suffix}`, codeTicks: normalized.codeTicks };
+}
+
+export function formatMarkdown(input: string): string {
+  const lines = input.replace(/\r\n?/g, '\n').split('\n');
+  const output: string[] = [];
+  const openingFence = (line: string) => line.match(/^ {0,3}(`{3,}|~{3,})/);
+  let fence: { marker: '`' | '~'; length: number } | null = null;
+  let frontmatter = lines[0]?.trim() === '---';
+  let inIndentedCode = false;
+  let inlineCodeTicks = 0;
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (frontmatter) {
+      output.push(line);
+      if (index > 0 && /^(?:---|\.\.\.)\s*$/.test(line.trim())) frontmatter = false;
+      continue;
+    }
+    if (inlineCodeTicks) {
+      const normalized = collapseMarkdownText(line, inlineCodeTicks);
+      output.push(normalized.text);
+      inlineCodeTicks = normalized.codeTicks;
+      continue;
+    }
+    if (fence) {
+      output.push(line);
+      const closing = line.match(/^ {0,3}(`+|~+)[ \t]*$/);
+      if (closing && closing[1][0] === fence.marker && closing[1].length >= fence.length) fence = null;
+      continue;
+    }
+    const opening = openingFence(line);
+    if (opening) {
+      output.push(line);
+      fence = { marker: opening[1][0] as '`' | '~', length: opening[1].length };
+      inIndentedCode = false;
+      continue;
+    }
+    if (!line.trim()) {
+      let end = index;
+      while (end + 1 < lines.length && !lines[end + 1].trim()) end++;
+      const next = lines[end + 1] || '';
+      if (inIndentedCode && (isIndentedCode(next) || end + 1 === lines.length)) {
+        for (let blank = index; blank <= end; blank++) output.push(lines[blank]);
+      } else if (output.length && output[output.length - 1] !== '') output.push('');
+      inIndentedCode = false;
+      index = end;
+      continue;
+    }
+    if (isIndentedCode(line)) {
+      output.push(line);
+      inIndentedCode = true;
+      continue;
+    }
+    inIndentedCode = false;
+    const normalized = normalizeMarkdownLine(line);
+    output.push(normalized.text);
+    inlineCodeTicks = normalized.codeTicks;
+  }
+  if (!fence && !frontmatter && !inIndentedCode && !inlineCodeTicks) {
+    while (output[output.length - 1] === '') output.pop();
+  }
+  return output.join('\n');
 }
 
 export function textStats(text: string) {
@@ -116,6 +304,7 @@ export function buildChangelogTemplate(name: string): string {
 
 function fieldProvenance(value: string | undefined, source: string | undefined) {
   if (source === 'your input') return 'Provided by you';
+  if (source === 'generic fallback') return 'Generic fallback; no project name was detected';
   if (source) return `Detected from ${source}`;
   if (!value?.trim() || value.trim() === 'Project name' || value.trim().startsWith('[Add ')) return 'Not detected; template prompt';
   return value?.trim() ? 'Provided by you' : 'Not detected; template prompt';
@@ -353,4 +542,18 @@ export function markdownToSafeHtml(markdown: string): string {
 
 export function emptyMeta(projectName = ''): ProjectMeta {
   return { projectName, fileCount: 0, lineEstimate: 0, tree: [], technologies: [], dependencies: [], devDependencies: [], scripts: {}, readmeFiles: [], sources: {}, origin: 'template', notes: [] };
+}
+
+export function applyProjectName(meta: ProjectMeta, customName: string): ProjectMeta {
+  const detectedProjectName = meta.detectedProjectName?.trim() || meta.projectName.trim() || 'Untitled project';
+  const trimmedCustomName = customName.trim();
+  return {
+    ...meta,
+    detectedProjectName,
+    projectName: trimmedCustomName || detectedProjectName,
+    sources: {
+      ...meta.sources,
+      projectName: trimmedCustomName ? 'your input' : meta.sources.projectName,
+    },
+  };
 }
