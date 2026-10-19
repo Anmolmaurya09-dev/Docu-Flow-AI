@@ -26,13 +26,27 @@ function Footer() {
         <nav aria-label="Footer navigation">
           <Link href="/about" data-testid="link-about">About</Link>
           <Link href="/privacy" data-testid="link-privacy">Privacy</Link>
-          <a href="mailto:?subject=Docu-Flow%20feedback" data-testid="link-feedback" aria-label="Open an email draft for feedback">Feedback</a>
+
+          {/* Updated Feedback Option */}
+          <a 
+            data-tally-open="4aXDAX" 
+            data-tally-layout="modal" 
+            data-tally-width="380" 
+            data-tally-align-left="1"
+            data-testid="link-feedback" 
+            aria-label="Open feedback popup"
+            style={{ cursor: 'pointer' }}
+          >
+            Feedback
+          </a>
+
           <a href="https://buymeacoffee.com/docu_flowai" target="_blank" rel="noopener noreferrer" data-testid="link-coffee" style={{ marginLeft: '12px' }}>Buy me a coffee</a>
         </nav>
       </div>
     </footer>
   );
 }
+
 function Layout({ children }: { children: ReactNode }) {
   return <div className="shell"><Header /><main className="wrap">{children}</main><Footer /></div>;
 }
